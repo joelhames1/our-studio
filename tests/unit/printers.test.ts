@@ -459,7 +459,7 @@ describe('finding printers', () => {
     const [old] = await listPrinters('first');
     expect(old.searches).toEqual({ '90210': '2026-10-17T00:00:00.000Z' });
     await updatePrinter('first', old.id, { status: 'saved' });
-    expect((await repo.listPrinters())[0]).toMatchObject({ status: 'saved', searches: { '90210': '2026-10-17T00:00:00.000Z' } });
+    expect((await repo.listPrinters('first'))[0]).toMatchObject({ status: 'saved', searches: { '90210': '2026-10-17T00:00:00.000Z' } });
   });
 
   it('stops before the server’s own time limit', async () => {

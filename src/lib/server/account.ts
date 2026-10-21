@@ -229,7 +229,11 @@ export interface PersonRow {
 }
 
 /** Everyone, for Setup → People, and households nobody's in any more. */
-export async function peopleOverview(admin: User): Promise<{ people: PersonRow[]; empty: { id: string; name: string; createdAt: string; projects: number }[] }> {
+export async function peopleOverview(admin: User): Promise<{
+  people: PersonRow[];
+  empty: { id: string; name: string; createdAt: string; projects: number }[];
+  ownerless: { id: string; name: string; members: { id: string; name: string }[] }[];
+}> {
   mustRunSite(admin);
   const dir = await everyone();
   const names = new Map(dir.households.map((h) => [h.id, h.name]));
@@ -253,10 +257,12 @@ export async function peopleOverview(admin: User): Promise<{ people: PersonRow[]
   );
   const projects = await repo.listProjects();
   const empty = [];
+  const ownerless = [];
   for (const h of dir.households) {
-    if ((await membersOf(h.id)).length) continue;
-    empty.push({ id: h.id, name: h.name, createdAt: h.createdAt, projects: projects.filter((p) => householdOf(p) === h.id).length });
+    const members = await membersOf(h.id);
+    if (!members.length) empty.push({ id: h.id, name: h.name, createdAt: h.createdAt, projects: projects.filter((p) => householdOf(p) === h.id).length });
+    else if (!members.some((m) => m.role === 'owner')) ownerless.push({ id: h.id, name: h.name, members: members.map((m) => ({ id: m.id, name: m.name })) });
   }
   const order = { open: 0, closed: 1, 'switched-off': 1 } as const;
-  return { people: people.sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name)), empty };
+  return { people: people.sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name)), empty, ownerless };
 }

@@ -11,3 +11,11 @@ export function tempRepo(): { repo: LocalRepo; dir: string } {
   setRepo(repo);
   return { repo, dir };
 }
+
+/** A session cookie for someone, on their list of signed-in browsers, as a real sign-in gives them. */
+export async function signedIn(id: string, now?: number): Promise<string> {
+  const { openSession } = await import('@/lib/server/sessions');
+  const { sessionCookie } = await import('@/lib/server/auth');
+  const sid = await openSession(id, 'vitest', 'a test');
+  return sessionCookie(id, sid ?? undefined, now).value;
+}

@@ -18,10 +18,10 @@ import { userForEmail } from './auth';
 import { joinOnSignIn } from './invites';
 import { personByEmail } from './people';
 import { config } from './config';
+import { cookieName } from './cookies';
 
-export const PKCE_COOKIE = 'studio_pkce';
+export const PKCE_COOKIE = cookieName('studio_pkce');
 export const CALLBACK_PATH = '/api/auth/callback';
-const COOKIE_PATH = '/api/auth';
 const WAIT_SECONDS = 10 * 60;
 const TIMEOUT_MS = 10_000;
 
@@ -174,7 +174,8 @@ async function fromSupabase(code: string, verifier: string, invite: unknown): Pr
   // Only a Google identity counts, matched on the address Google vouches for.
   const google = user?.identities?.find((i) => i.provider === 'google');
   if (!user || !google) return 'failed';
-  const who = await arrive(google.identity_data?.email, google.identity_data?.email_verified !== false, invite);
+  // Only an address Google says it has checked: a missing answer counts as no.
+  const who = await arrive(google.identity_data?.email, google.identity_data?.email_verified === true, invite);
   if (who === 'not-invited' || who === 'invite-gone') await forget(user.id);
   return who;
 }
@@ -191,7 +192,7 @@ async function forget(id: unknown) {
 
 /** The short-lived cookie that holds the verifier while you're at Google. */
 export function verifierCookie(value: string) {
-  return { name: PKCE_COOKIE, value, httpOnly: true, secure: config.isProduction, sameSite: 'lax' as const, path: COOKIE_PATH, maxAge: value ? WAIT_SECONDS : 0 };
+  return { name: PKCE_COOKIE, value, httpOnly: true, secure: config.isProduction, sameSite: 'lax' as const, path: '/', maxAge: value ? WAIT_SECONDS : 0 };
 }
 
 /** Back to the welcome screen, saying why. */

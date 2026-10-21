@@ -6,6 +6,7 @@ import type { OptionRecord, User } from '@/lib/engine/types';
 import { BACK, type ShirtSnapshot } from '@/lib/kinds/shirt';
 import { record } from './activity';
 import { HttpError } from './auth';
+import { revokeProjectShares } from './printers';
 import { getRepo } from './repo';
 import { canManage, getShirtProject, type ShirtProject } from './studio';
 
@@ -24,6 +25,8 @@ export async function archiveProject(user: User, id: string): Promise<ShirtProje
     project.archivedBy = user.id;
     project.updatedAt = project.archivedAt;
     await getRepo().saveProject(project);
+    // Put away means put away: printer links to its files stop too (restoring doesn't bring them back; make a new one).
+    await revokeProjectShares(project.id);
     await record(user, 'archived', { project });
   }
   return project;

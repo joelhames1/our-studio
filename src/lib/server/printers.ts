@@ -4,7 +4,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { GARMENT_STYLES, printPreset, printSizeIn } from '@/lib/design/garments';
 import { garmentColor } from '@/lib/design/palettes';
-import type { Decision, ShareLink, User } from '@/lib/engine/types';
+import type { Decision, HouseholdId, ShareLink, User, UserId } from '@/lib/engine/types';
 import { DAY_MS, FRESH_DAYS, lastSearched, normalZip, PRINT_METHODS, type Printer, type PrinterStatus, type PrintJob, type PrintMethod } from '@/lib/kinds/printers';
 import type { ShirtSnapshot } from '@/lib/kinds/shirt';
 import { HttpError } from './auth';
@@ -135,7 +135,7 @@ function upgrade(p: Printer & { zip?: string }): Printer {
 
 /** A household's printers. Each household has its own list; nobody sees another's searches, shortlist or notes. */
 export async function listPrinters(household: string): Promise<Printer[]> {
-  return (await getRepo().listPrinters()).filter((p) => (p.householdId ?? FIRST_HOUSEHOLD) === household).map(upgrade);
+  return (await getRepo().listPrinters(household)).map(upgrade);
 }
 
 /** The same shop found by two households is two records: the first household's keep their old ids. */
@@ -273,6 +273,28 @@ export async function revokeShares(projectId: string, hash: unknown): Promise<vo
   const at = new Date().toISOString();
   decision.shares = (decision.shares ?? []).map((s) => (live(s) && (hash === undefined || hash === null || s.hash === hash) ? { ...s, revokedAt: at } : s));
   await getRepo().saveDecision(decision);
+}
+
+/** Turns off the live links on a project's approvals that `revoke` picks. */
+async function revokeWhere(projectId: string, revoke: (s: ShareLink) => boolean): Promise<void> {
+  const repo = getRepo();
+  const at = new Date().toISOString();
+  for (const d of await repo.listDecisions(projectId)) {
+    if (!(d.shares ?? []).some((s) => live(s) && revoke(s))) continue;
+    await repo.saveDecision({ ...d, shares: d.shares!.map((s) => (live(s) && revoke(s) ? { ...s, revokedAt: at } : s)) });
+  }
+}
+
+/** Put away: a project's printer links stop, so a printer can't keep opening files nobody's using. */
+export async function revokeProjectShares(projectId: string): Promise<void> {
+  await revokeWhere(projectId, () => true);
+}
+
+/** Someone's gone from a household: the printer links they made there stop with them. */
+export async function revokeSharesBy(personId: UserId, household: HouseholdId): Promise<void> {
+  for (const p of (await getRepo().listProjects()) as ShirtProject[]) {
+    if (householdOf(p) === household) await revokeWhere(p.id, (s) => s.createdBy === personId);
+  }
 }
 
 /** What a printer link opens, or null if it's wrong, expired, turned off, or the design was reopened. */

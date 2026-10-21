@@ -6,13 +6,13 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { tempRepo } from './helpers';
+import { signedIn, tempRepo } from './helpers';
 import { GET as asset } from '@/app/api/assets/[...key]/route';
 import { preset } from '@/lib/design/occasions';
 import type { User } from '@/lib/engine/types';
 import type { Printer } from '@/lib/kinds/printers';
 import { activityFor, record } from '@/lib/server/activity';
-import { COOKIE, sessionCookie, userForSession, USERS } from '@/lib/server/auth';
+import { COOKIE, userForSession, USERS } from '@/lib/server/auth';
 import { approve } from '@/lib/server/decisions';
 import { archivedCount, projectSummaries } from '@/lib/server/overview';
 import { directoryCounts, forgetDirectory, getHousehold, membersOf, renameHousehold, userByEmail, userById } from '@/lib/server/people';
@@ -70,8 +70,8 @@ async function neighbours(repo: LocalRepo): Promise<{ sam: User; ana: User }> {
   return { sam: (await userById('sam'))!, ana: (await userById('ana'))! };
 }
 
-const signIn = (id: string) => {
-  jar.value = sessionCookie(id).value;
+const signIn = async (id: string) => {
+  jar.value = await signedIn(id);
 };
 type Handler = (req: Request, ctx: { params: Promise<object> }) => Promise<Response>;
 /** Calls a route handler as the browser would, signed in as whoever `signIn` last named. */
@@ -166,7 +166,7 @@ describe('another household', () => {
     const ours = await birthday(joel);
     const [option] = (await projectState(ours.id, joel)).options;
     await neighbours(repo);
-    signIn('sam');
+    await signIn('sam');
     const routes: [string, string, object?][] = [
       ['', 'GET'],
       ['', 'PATCH', { vibes: [] }],
@@ -198,7 +198,7 @@ describe('another household', () => {
     expect(await repo.getProject(ours.id)).toEqual(ours);
     expect(await repo.listReactions(ours.id)).toEqual([]);
     // Joel still gets in.
-    signIn('joel');
+    await signIn('joel');
     const mod = await import('@/app/api/projects/[id]/route');
     expect((await call(mod.GET, 'GET', `/api/projects/${ours.id}`, { id: ours.id })).status).toBe(200);
   });
@@ -214,7 +214,7 @@ describe('another household', () => {
       await repo.putAsset(key, png);
     }
     const open = async (who: string, key: string) => {
-      signIn(who);
+      await signIn(who);
       return (await call(asset, 'GET', `/api/assets/${key}`, { key: key.split('/') })).status;
     };
     for (const key of ['art/old.png', 'art/first/new.png', `decisions/${decision.id}/order.txt`]) {
@@ -267,7 +267,7 @@ describe('sessions', () => {
   it('can name anyone, and stop working once they belong to no household', async () => {
     const { repo } = tempRepo();
     await neighbours(repo);
-    const cookie = sessionCookie('sam');
+    const cookie = { name: COOKIE, value: await signedIn('sam') };
     expect(cookie.name).toBe(COOKIE);
     expect(await userForSession(cookie.value)).toMatchObject({ id: 'sam', household: 'riveras' });
     const { memberships } = (await repo.loadDirectory())!;

@@ -47,7 +47,12 @@ export interface Repo {
   addSpend(e: SpendEntry): Promise<void>;
   /** Replaces an entry by id (used to settle a hold with the real cost). */
   updateSpend(e: SpendEntry): Promise<void>;
-  listSpendSince(isoDate: string): Promise<SpendEntry[]>;
+  /** Removes an entry (a hold for a call that was refused). */
+  deleteSpend(id: string): Promise<void>;
+  /** Entries since a time, oldest first; or just the `newest` few, newest first. */
+  listSpendSince(isoDate: string, opts?: { newest?: number }): Promise<SpendEntry[]>;
+  /** What each household has spent since a time, added up where the entries are (entries from before households are the first household's). */
+  spendTotals(isoDate: string): Promise<Map<HouseholdId, number>>;
 
   /**
    * The activity log, newest first. `before` pages back from an entry's time;
@@ -96,7 +101,8 @@ export interface Repo {
   hit(key: string, expires: Date): Promise<number | null>;
 
   /** The shared printer list. */
-  listPrinters(): Promise<Printer[]>;
+  /** One household's printers (those from before households are the first household's). */
+  listPrinters(household: HouseholdId): Promise<Printer[]>;
   savePrinters(printers: Printer[]): Promise<void>;
   deletePrinter(id: string): Promise<void>;
 

@@ -4,6 +4,7 @@
 // policies, so nothing is reachable from a browser.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { ActivityAction, ActivityEntry, Decision, Household, HouseholdId, Invite, Membership, OptionRecord, Person, Project, Reaction, SessionRecord, SpendEntry, UserId } from '@/lib/engine/types';
+import { FIRST_HOUSEHOLD } from '@/lib/engine/types';
 import type { Printer } from '@/lib/kinds/printers';
 import { SetupNeeded, type DirectoryData, type Repo, type StoredAsset } from './types';
 
@@ -32,8 +33,16 @@ const TABLES: [table: string, column: string, file: string][] = [
  * shouldn't bring back.
  */
 const BACKED_UP = TABLES.map(([table]) => table).filter((table) => table !== 'rate_limits' && table !== 'sessions');
-/** Rows per request when backing up or restoring. */
+/**
+ * Rows per request. Supabase sends at most its "Max rows" setting per request
+ * (1,000 unless it's been changed), whatever limit is asked for, so anything
+ * that can be longer is read a page at a time. Keep that setting at 1,000 or more.
+ */
 const PAGE = 1000;
+/** Each table's key, for a stable order to page through. */
+const KEY: Record<string, string[]> = { reactions: ['option_id', 'user_id'], memberships: ['household_id', 'person_id'], rate_limits: ['key'] };
+const keyOf = (table: string) => KEY[table] ?? ['id'];
+type Page = PromiseLike<{ data: unknown; error: SupabaseError }>;
 
 /** A table or function that a later setup file adds, and that file hasn't been run yet. */
 const notThereYet = (error: SupabaseError) => ['42P01', 'PGRST205', 'PGRST202', '42883'].includes(error?.code ?? '');
@@ -114,12 +123,29 @@ export class SupabaseRepo implements Repo {
     throw explainSupabaseError(what, error, this.host);
   }
 
+  /** Every row a query matches, a page at a time; null if its table hasn't been made yet and `missing` says that's fine. */
+  private async paged<T>(what: string, page: (from: number, to: number) => Page, missing?: 'ok'): Promise<T[] | null> {
+    const out: T[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await page(from, from + PAGE - 1);
+      if (error) {
+        if (missing && notThereYet(error)) return null;
+        this.fail(what, error);
+      }
+      const rows = (data ?? []) as { data: T }[];
+      out.push(...rows.map((r) => r.data));
+      if (rows.length < PAGE) return out;
+    }
+  }
+
   private async rows<T>(table: string, column?: string, value?: string): Promise<T[]> {
-    let q = this.sb.from(table).select('data');
-    if (column) q = q.eq(column, value!);
-    const { data, error } = await q.order('created_at', { ascending: true }).limit(5000);
-    if (error) this.fail(`read ${table}`, error);
-    return (data ?? []).map((r) => r.data as T);
+    return (await this.paged<T>(`read ${table}`, (from, to) => {
+      let q = this.sb.from(table).select('data');
+      if (column) q = q.eq(column, value!);
+      q = q.order('created_at', { ascending: true });
+      for (const k of keyOf(table)) q = q.order(k, { ascending: true });
+      return q.range(from, to);
+    }))!;
   }
 
   private async one<T>(table: string, id: string): Promise<T | null> {
@@ -205,10 +231,34 @@ export class SupabaseRepo implements Repo {
     const { error } = await this.sb.from('spend').update({ usd: e.usd, data: e }).eq('id', e.id);
     if (error) this.fail('record spend', error);
   }
-  async listSpendSince(isoDate: string) {
-    const { data, error } = await this.sb.from('spend').select('data').gte('at', isoDate).limit(10000);
-    if (error) this.fail('read spend', error);
-    return (data ?? []).map((r) => r.data as SpendEntry);
+  async deleteSpend(id: string) {
+    const { error } = await this.sb.from('spend').delete().eq('id', id);
+    if (error) this.fail('release spend hold', error);
+  }
+  async listSpendSince(isoDate: string, opts: { newest?: number } = {}) {
+    if (opts.newest) {
+      const { data, error } = await this.sb.from('spend').select('data').gte('at', isoDate).order('at', { ascending: false }).limit(Math.min(opts.newest, PAGE));
+      if (error) this.fail('read spend', error);
+      return (data ?? []).map((r) => r.data as SpendEntry);
+    }
+    return (await this.paged<SpendEntry>('read spend', (from, to) => this.sb.from('spend').select('data').gte('at', isoDate).order('at').order('id').range(from, to)))!;
+  }
+  /** Until when to add up spending here rather than in the database, after finding 0008's function missing. */
+  private totalsMissingUntil = 0;
+  async spendTotals(isoDate: string) {
+    if (Date.now() >= this.totalsMissingUntil) {
+      const { data, error } = await this.sb.rpc('spend_totals', { since: isoDate });
+      if (!error) return new Map(((data ?? []) as { household_id: string; usd: number | string }[]).map((r) => [r.household_id, Number(r.usd) || 0]));
+      if (!notThereYet(error)) this.fail('add up spending', error);
+      this.totalsMissingUntil = Date.now() + 5 * 60_000;
+    }
+    // Before 0008: every row, a page at a time (slower, still right).
+    const totals = new Map<HouseholdId, number>();
+    for (const r of await this.listSpendSince(isoDate)) {
+      const h = r.householdId ?? FIRST_HOUSEHOLD;
+      totals.set(h, (totals.get(h) ?? 0) + (Number(r.usd) || 0));
+    }
+    return totals;
   }
 
   async addActivity(e: ActivityEntry) {
@@ -232,20 +282,15 @@ export class SupabaseRepo implements Repo {
   }
 
   async loadDirectory(): Promise<DirectoryData | null> {
-    const [people, households, memberships] = await Promise.all(
-      (['people', 'households', 'memberships'] as const).map((table) => this.sb.from(table).select('data').order('created_at', { ascending: true }).limit(10000)),
-    );
-    for (const [table, r] of [['people', people], ['households', households], ['memberships', memberships]] as const) {
-      if (r.error) {
-        if (notThereYet(r.error)) return null;
-        this.fail(`read ${table}`, r.error);
-      }
-    }
-    return {
-      people: (people.data ?? []).map((r) => r.data as Person),
-      households: (households.data ?? []).map((r) => r.data as Household),
-      memberships: (memberships.data ?? []).map((r) => r.data as Membership),
-    };
+    const read = <T,>(table: 'people' | 'households' | 'memberships') =>
+      this.paged<T>(`read ${table}`, (from, to) => {
+        let q = this.sb.from(table).select('data').order('created_at', { ascending: true });
+        for (const k of keyOf(table)) q = q.order(k, { ascending: true });
+        return q.range(from, to);
+      }, 'ok');
+    const [people, households, memberships] = await Promise.all([read<Person>('people'), read<Household>('households'), read<Membership>('memberships')]);
+    if (!people || !households || !memberships) return null;
+    return { people, households, memberships };
   }
   async savePerson(p: Person) {
     const { error } = await this.sb.from('people').upsert({ id: p.id, email: p.email ?? null, data: p, created_at: p.createdAt });
@@ -365,10 +410,13 @@ export class SupabaseRepo implements Repo {
     return typeof data === 'number' ? data : Number(data);
   }
 
-  async listPrinters() {
-    const { data, error } = await this.sb.from('printers').select('data').order('created_at', { ascending: true }).limit(2000);
-    if (error) this.fail('read printers', error);
-    return (data ?? []).map((r) => r.data as Printer);
+  async listPrinters(household: HouseholdId) {
+    return (await this.paged<Printer>('read printers', (from, to) => {
+      // Printers from before households have no household of their own: they're the first one's.
+      const q = this.sb.from('printers').select('data');
+      const mine = household === FIRST_HOUSEHOLD ? q.or(`data->>householdId.is.null,data->>householdId.eq.${FIRST_HOUSEHOLD}`) : q.eq('data->>householdId', household);
+      return mine.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to);
+    }))!;
   }
   async savePrinters(printers: Printer[]) {
     if (!printers.length) return;
@@ -398,15 +446,19 @@ export class SupabaseRepo implements Repo {
     const out: Record<string, unknown[]> = {};
     for (const table of BACKED_UP) {
       const rows: unknown[] = [];
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await this.sb.from(table).select('*').range(from, from + PAGE - 1);
+      // In key order, and until a page comes back empty, so a lower "Max rows" can't quietly cut a backup short.
+      for (let from = 0; ; ) {
+        let q = this.sb.from(table).select('*');
+        for (const k of keyOf(table)) q = q.order(k, { ascending: true });
+        const { data, error } = await q.range(from, from + PAGE - 1);
         if (error) {
           // A table from a setup file that hasn't been run yet has nothing to back up.
           if (notThereYet(error)) break;
           this.fail(`back up ${table}`, error);
         }
-        rows.push(...(data ?? []));
-        if ((data ?? []).length < PAGE) break;
+        if (!data?.length) break;
+        rows.push(...data);
+        from += data.length;
       }
       out[table] = rows;
     }
@@ -466,6 +518,14 @@ export class SupabaseRepo implements Repo {
       await this.ensureBucket();
     } catch (e) {
       return { ok: false, message: (e as Error).message };
+    }
+    // Functions too: without 0008, budgets still work but every AI call reads the whole month.
+    const totals = await this.sb.rpc('spend_totals', { since: new Date().toISOString() });
+    if (totals.error) {
+      const message = notThereYet(totals.error)
+        ? 'Supabase is connected, but the spend_totals function isn’t there yet. Run supabase/migrations/0008_spend_totals.sql in Supabase’s SQL Editor (it’s also in the setup SQL below).'
+        : explainSupabaseError('check', totals.error, this.host).message;
+      return { ok: false, message };
     }
     const { data: bucket } = await this.sb.storage.getBucket(BUCKET);
     if (bucket?.public) {

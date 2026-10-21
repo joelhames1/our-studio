@@ -8,16 +8,17 @@ import { cookies } from 'next/headers';
 import type { User, UserId } from '@/lib/engine/types';
 import { config } from './config';
 import { assumeHousehold } from './context';
+import { cookieName } from './cookies';
 import { HttpError } from './errors';
 import { FOUNDERS, personById, userByEmail, userById } from './people';
 import { readSession, sameSecret, SESSION_DAYS, signSession } from './session';
-import { openSession, sessionAlive } from './sessions';
+import { openSession, sessionAlive, sessionsListed } from './sessions';
 
 export { HttpError };
 
-export const COOKIE = 'studio_session';
+export const COOKIE = cookieName('studio_session');
 /** Which of your households this browser is working in, for people in more than one. */
-export const HOUSEHOLD_COOKIE = 'studio_household';
+export const HOUSEHOLD_COOKIE = cookieName('studio_household');
 
 /** The first household's two people, as they were before households. */
 export const USERS = FOUNDERS;
@@ -31,15 +32,16 @@ export function whoFixes(user: User): string {
 }
 
 /**
- * The secret each person's sessions are signed with: Joel's and Erin's link
- * tokens while they have them (so changing one signs just that person out),
- * otherwise the server's own secret, for Google and email codes.
+ * The secret each person's sessions are signed with: the server's own, which
+ * only the server has, however they signed in. A personal link's token is only
+ * ever traded for a session, never used to sign one, so a link that was once
+ * shared can't be turned into a session without asking the server.
  */
 function secretFor(id: UserId): string | undefined {
-  const real = id === 'erin' ? config.erinToken : id === 'joel' ? config.joelToken : undefined;
-  if (real) return real;
-  if (config.googleSignIn || config.emailCodes) return config.serverSecret;
-  // The laptop-only picker has no real tokens; anyone there can pick anyone anyway.
+  if (config.serverSecret) return config.serverSecret;
+  // Before Supabase is connected: the personal links while they're on, or the laptop-only picker.
+  const link = id === 'erin' ? config.erinToken : id === 'joel' ? config.joelToken : undefined;
+  if (link && !config.linksOff) return link;
   return config.devLogin ? `dev-only-${id}` : undefined;
 }
 
@@ -58,14 +60,15 @@ export const userForEmail = userByEmail;
 /**
  * Who a session cookie value belongs to: null if it's forged or expired, if
  * that browser was signed out (from the list of your devices, or "sign out
- * everywhere"), or they're no longer in any household.
+ * everywhere"), or they're no longer in any household. Once there's a list of
+ * signed-in browsers, every session has to be on it.
  */
 export async function userForSession(value: string | undefined | null, now?: number, household?: string): Promise<User | null> {
   const s = readSession(value, secretFor, config.sessionVersion, now);
   if (!s) return null;
   const cutoff = (await personById(s.id))?.signedOutAt;
   if (cutoff && s.iat * 1000 < Date.parse(cutoff)) return null;
-  if (s.sid && !(await sessionAlive(s.sid, s.id))) return null;
+  if (s.sid ? !(await sessionAlive(s.sid, s.id)) : await sessionsListed()) return null;
   return userById(s.id, household);
 }
 

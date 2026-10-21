@@ -171,8 +171,22 @@ export class LocalRepo implements Repo {
       else db.spend.push(e);
     });
   }
-  async listSpendSince(isoDate: string) {
-    return (await this.read()).spend.filter((s) => s.at >= isoDate);
+  deleteSpend(id: string) {
+    return this.write((db) => {
+      db.spend = db.spend.filter((x) => x.id !== id);
+    });
+  }
+  async listSpendSince(isoDate: string, opts: { newest?: number } = {}) {
+    const rows = (await this.read()).spend.filter((s) => s.at >= isoDate);
+    return opts.newest ? [...rows].sort((a, b) => b.at.localeCompare(a.at)).slice(0, opts.newest) : rows;
+  }
+  async spendTotals(isoDate: string) {
+    const totals = new Map<HouseholdId, number>();
+    for (const r of (await this.read()).spend.filter((s) => s.at >= isoDate)) {
+      const h = r.householdId ?? FIRST_HOUSEHOLD;
+      totals.set(h, (totals.get(h) ?? 0) + (Number(r.usd) || 0));
+    }
+    return totals;
   }
 
   addActivity(e: ActivityEntry) {
@@ -314,8 +328,8 @@ export class LocalRepo implements Repo {
     return h.n;
   }
 
-  async listPrinters() {
-    return (await this.read()).printers ?? [];
+  async listPrinters(household: HouseholdId) {
+    return ((await this.read()).printers ?? []).filter((p) => (p.householdId ?? FIRST_HOUSEHOLD) === household);
   }
   savePrinters(printers: Printer[]) {
     return this.write((db) => {

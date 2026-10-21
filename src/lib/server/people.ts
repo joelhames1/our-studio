@@ -146,6 +146,16 @@ export function forgetDirectory() {
   cache.delete(getRepo().where);
 }
 
+/**
+ * Reads the directory again before a decision that has to be right this
+ * second (who's an owner, whether an invite's maker still is), rather than
+ * trusting a copy that could be a few seconds old on this server.
+ */
+export async function refreshDirectory(): Promise<void> {
+  forgetDirectory();
+  await directory();
+}
+
 /** As the app sees them, working in `prefer` if they belong to it, otherwise the household they joined first. */
 function userOf(dir: Directory, p: Person, prefer?: string): User | null {
   const mine = dir.memberships.get(p.id) ?? [];

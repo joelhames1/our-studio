@@ -18,12 +18,13 @@ import type { User } from '@/lib/engine/types';
 import { HttpError, userForEmail } from './auth';
 import { holdsInvite, joinOnSignIn } from './invites';
 import { config } from './config';
+import { cookieName } from './cookies';
 import { sendEmail } from './email';
 import { howLong } from './limits';
 import { getRepo } from './repo';
 import { sameSecret } from './session';
 
-export const CODE_COOKIE = 'studio_code';
+export const CODE_COOKIE = cookieName('studio_code');
 export const CODE_MINUTES = 10;
 export const MAX_TRIES = 5;
 /** [window in seconds, most codes in it], per address. */
@@ -144,7 +145,7 @@ export async function checkCode(cookie: unknown, typed: unknown, now = Date.now(
   return who;
 }
 
-/** The cookie that holds a code's signature while you fetch the email. Only the code routes ever see it. */
+/** The cookie that holds a code's signature while you fetch the email. Only the code routes read it; SameSite=Strict keeps it off other sites' requests. */
 export function codeCookie(value: string) {
   return {
     name: CODE_COOKIE,
@@ -152,7 +153,7 @@ export function codeCookie(value: string) {
     httpOnly: true,
     secure: config.isProduction,
     sameSite: 'strict' as const,
-    path: '/api/auth/code',
+    path: '/',
     maxAge: value ? CODE_MINUTES * 60 : 0,
   };
 }

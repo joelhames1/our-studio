@@ -18,21 +18,19 @@ export function monthStart(d = new Date()): string {
 }
 
 const round = (usd: number) => Math.round(Math.max(0, usd) * 10000) / 10000;
-const total = (rows: SpendEntry[]) => Math.round(rows.reduce((a, r) => a + (Number(r.usd) || 0), 0) * 100) / 100;
+const cents = (usd: number) => Math.round(usd * 100) / 100;
 /** Whose budget an entry came out of; older entries were all the first household's. */
 export const householdOfSpend = (r: SpendEntry): HouseholdId => r.householdId ?? FIRST_HOUSEHOLD;
 
-/** Spent so far this month: by everyone, or by one household. */
+/** Spent so far this month: by everyone, or by one household. Added up where the entries are, never from a list that could be cut short. */
 export async function spentThisMonth(household?: HouseholdId): Promise<number> {
-  const rows = await getRepo().listSpendSince(monthStart());
-  return total(household ? rows.filter((r) => householdOfSpend(r) === household) : rows);
+  const totals = await getRepo().spendTotals(monthStart());
+  return cents(household ? (totals.get(household) ?? 0) : [...totals.values()].reduce((a, b) => a + b, 0));
 }
 
 /** Each household's spending so far this month. */
 export async function spentByHousehold(): Promise<Map<HouseholdId, number>> {
-  const by = new Map<HouseholdId, SpendEntry[]>();
-  for (const r of await getRepo().listSpendSince(monthStart())) by.set(householdOfSpend(r), [...(by.get(householdOfSpend(r)) ?? []), r]);
-  return new Map([...by].map(([id, rows]) => [id, total(rows)]));
+  return new Map([...(await getRepo().spendTotals(monthStart()))].map(([id, usd]) => [id, cents(usd)]));
 }
 
 /** A household's own monthly limit, or null when only the site's budget applies (the first household, until Joel sets one). */
@@ -83,10 +81,10 @@ export async function reserveSpend(provider: string, model: string, estimateUsd:
   const repo = getRepo();
   const hold: SpendEntry = { id: newId(), at: new Date().toISOString(), provider, model, usd: round(estimateUsd), note: `${note} (in progress)`, projectId, householdId };
   await repo.addSpend(hold);
-  const rows = await repo.listSpendSince(monthStart());
-  const mine = total(rows.filter((r) => householdOfSpend(r) === householdId));
+  const totals = await repo.spendTotals(monthStart());
+  const mine = cents(totals.get(householdId) ?? 0);
   const limit = householdBudget(householdId, await getHousehold(householdId));
-  const everyone = total(rows);
+  const everyone = cents([...totals.values()].reduce((a, b) => a + b, 0));
   const refusal =
     limit !== null && mine > limit
       ? householdOver(Math.max(0, mine - hold.usd), limit, householdId)
@@ -94,7 +92,8 @@ export async function reserveSpend(provider: string, model: string, estimateUsd:
         ? overBudget(Math.max(0, everyone - hold.usd), householdId)
         : null;
   if (refusal) {
-    await repo.updateSpend({ ...hold, usd: 0, note: `${note} (skipped: over budget)` }).catch((e) => console.error('Could not release spend hold', e));
+    // Gone, not zeroed: a refused call leaves nothing behind to pile up.
+    await repo.deleteSpend(hold.id).catch((e) => console.error('Could not release spend hold', e));
     throw refusal;
   }
   let settled = false;

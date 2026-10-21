@@ -2,7 +2,7 @@
 // browser that asked, 5 tries, one use; the same answer for every address;
 // and sessions that work when codes are the only way in.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { tempRepo } from './helpers';
+import { tempRepo, signedIn } from './helpers';
 import { POST as check } from '@/app/api/auth/code/check/route';
 import { POST as send } from '@/app/api/auth/code/route';
 import { COOKIE, sessionCookie, userForSession, USERS } from '@/lib/server/auth';
@@ -73,7 +73,8 @@ describe('email codes', () => {
     const held = setCookie(asked, CODE_COOKIE);
     expect(held.line).toMatch(/HttpOnly/i);
     expect(held.line).toMatch(/SameSite=Strict/i);
-    expect(held.line).toMatch(/Path=\/api\/auth\/code/);
+    expect(held.line).toMatch(/Path=\/;/);
+    expect(held.line).toMatch(/SameSite=Strict/i);
     expect(held.line).toMatch(/Max-Age=600/);
 
     expect(emails).toHaveLength(1);
@@ -202,7 +203,7 @@ describe('sessions', () => {
     expect(config.emailCodes).toBe(true);
     expect(config.authConfigured).toBe(true);
     expect(config.devLogin).toBe(false);
-    expect(await userForSession(sessionCookie('joel').value)).toEqual(USERS.joel);
+    expect(await userForSession(await signedIn('joel'))).toEqual(USERS.joel);
   });
 
   it('can’t be made without a server secret', () => {

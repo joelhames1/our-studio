@@ -170,3 +170,26 @@ export function EmptyHousehold({ h }: { h: { id: string; name: string; createdAt
     </li>
   );
 }
+
+/** A household with people in it but no owner left, which Joel can hand to one of them. */
+export function OwnerlessHousehold({ h }: { h: { id: string; name: string; members: { id: string; name: string }[] } }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState('');
+  const make = async (person: { id: string; name: string }) => {
+    setBusy(person.id);
+    await act({ action: 'make-owner', household: h.id, person: person.id }, `${person.name} owns ${h.name} now`, router);
+    setBusy('');
+  };
+  return (
+    <li className="px-4 py-3.5">
+      <p className="text-[15px] font-medium">{h.name}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {h.members.map((m) => (
+          <Button key={m.id} size="sm" variant="secondary" busy={busy === m.id} onClick={() => make(m)}>
+            Make {m.name} the owner
+          </Button>
+        ))}
+      </div>
+    </li>
+  );
+}

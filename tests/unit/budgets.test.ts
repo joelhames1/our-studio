@@ -3,12 +3,12 @@
 // still stops everyone, and the money comes out of the right household's
 // pocket however the call is reached.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { tempRepo } from './helpers';
+import { signedIn, tempRepo } from './helpers';
 import { POST as setBudget } from '@/app/api/admin/budget/route';
 import { POST as words } from '@/app/api/projects/[id]/words/route';
 import { preset } from '@/lib/design/occasions';
 import type { User } from '@/lib/engine/types';
-import { sessionCookie, USERS, type HttpError } from '@/lib/server/auth';
+import { USERS, type HttpError } from '@/lib/server/auth';
 import { agree } from '@/lib/server/consent';
 import { assumeHousehold, currentHousehold, setHousehold, withContext } from '@/lib/server/context';
 import { forgetDirectory, getHousehold, setHouseholdBudget, userById } from '@/lib/server/people';
@@ -70,6 +70,21 @@ const refusal = async (p: Promise<unknown>) => {
 };
 
 describe('a household’s own limit', () => {
+  it('holds when the month has more entries than one read returns', async () => {
+    const { repo } = tempRepo();
+    await riveras(repo);
+    // Like Supabase by default: a list comes back cut to its first 1,000 rows, however many there are.
+    const all = repo.listSpendSince.bind(repo);
+    repo.listSpendSince = async (iso, opts) => (await all(iso, opts)).slice(0, 1000);
+    const at = new Date().toISOString();
+    for (let i = 0; i < 1200; i++) await repo.addSpend({ id: `pad${i}`, at, provider: 'test', model: 'm', usd: 0, note: 'refused', householdId: 'riveras' });
+    await (await spend('riveras', 9.5))(9.5);
+    expect(await spentThisMonth('riveras')).toBe(9.5);
+    await refusal(spend('riveras', 1));
+    // A refused call leaves nothing behind.
+    expect((await all(at)).filter((r) => r.note.startsWith('artwork'))).toHaveLength(1);
+  });
+
   it('stops that household at its limit and nobody else', async () => {
     const { repo } = tempRepo();
     await riveras(repo);
@@ -160,7 +175,7 @@ describe('whose money it is', () => {
     await setHouseholdBudget(joel, 'riveras', 0);
     // A key that isn't real: the call is refused before anything is sent.
     process.env.ANTHROPIC_API_KEY = 'sk-ant-test-not-a-real-key';
-    jar.value = sessionCookie('sam').value;
+    jar.value = await signedIn('sam');
     const res = await words(
       new Request(`${SITE}/api/projects/${project.id}/words`, { method: 'POST', headers: { 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }, body: '{}' }),
       { params: Promise.resolve({ id: project.id }) },
@@ -188,9 +203,9 @@ describe('Setup', () => {
       setBudget(new Request(`${SITE}/api/admin/budget`, { method: 'POST', headers: { 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }, body: JSON.stringify(body) }), {
         params: Promise.resolve({}),
       });
-    jar.value = sessionCookie(sam.id).value;
+    jar.value = await signedIn(sam.id);
     expect((await post({ household: 'riveras', usd: 50 })).status).toBe(403);
-    jar.value = sessionCookie('joel').value;
+    jar.value = await signedIn('joel');
     const ok = await post({ household: 'riveras', usd: 25 });
     expect(ok.status).toBe(200);
     expect((await setupStatus(SITE)).budget.households[1]).toMatchObject({ limit: 25, custom: true });

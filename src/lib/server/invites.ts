@@ -10,18 +10,19 @@
 // sign-in routes see) adds them as they arrive.
 import 'server-only';
 import { createHash, randomBytes } from 'node:crypto';
-import type { Invite, Person, User } from '@/lib/engine/types';
+import type { HouseholdId, Invite, Person, User, UserId } from '@/lib/engine/types';
 import { record } from './activity';
 import { ADMIN } from './auth';
 import { config } from './config';
+import { cookieName } from './cookies';
 import { HttpError } from './errors';
 import { newId } from './ids';
 import { rateLimit } from './limits';
-import { cleanName, forgetDirectory, getHousehold, nameOf, personByEmail, userById } from './people';
+import { cleanName, forgetDirectory, getHousehold, membersOf, nameOf, personByEmail, personById, refreshDirectory, userById } from './people';
 import { getRepo } from './repo';
 
 export const INVITE_DAYS = 7;
-export const INVITE_COOKIE = 'studio_invite';
+export const INVITE_COOKIE = cookieName('studio_invite');
 /** How long an opened invite waits for its person to finish signing in. */
 const HOLD_MINUTES = 30;
 /** Open invites a household can have at once. */
@@ -81,8 +82,36 @@ export async function createInvite(user: User, input: { kind?: unknown; name?: u
     expiresAt: new Date(now.getTime() + INVITE_DAYS * 86_400_000).toISOString(),
   };
   await getRepo().saveInvite(invite);
-  await record(user, 'invited', { detail: kind === 'household' ? `${name} to start ${householdName}` : name });
+  // An invite to start a household goes in that household's own log, not the one Joel happens to be working in.
+  await record(kind === 'household' ? { ...user, household: householdId } : user, 'invited', { detail: kind === 'household' ? `${name} to start ${householdName}` : name });
   return { invite, link: `${origin}/join#${token}` };
+}
+
+/**
+ * Takes back the invites someone made into a household that nobody has used
+ * yet: once they're not an owner there (removed, made a member, gone), they
+ * can't let anyone in, including themselves.
+ */
+export async function cancelInvitesBy(personId: UserId, householdId: HouseholdId): Promise<number> {
+  const repo = getRepo();
+  const theirs = ((await repo.listInvites()) ?? []).filter((i) => i.createdBy === personId && i.householdId === householdId && !i.usedAt);
+  for (const i of theirs) await repo.deleteInvite(i.id);
+  return theirs.length;
+}
+
+/**
+ * Whether whoever made an invite could still make it now: an owner of that
+ * household, or whoever runs the site for a new one. Read fresh, so an owner
+ * removed a moment ago on another server can't slip back in with a link they
+ * made earlier.
+ */
+async function makerCanStill(invite: Invite): Promise<boolean> {
+  await refreshDirectory();
+  if (invite.kind === 'household') {
+    const maker = await personById(invite.createdBy);
+    return !!maker?.siteAdmin && !maker.archivedAt;
+  }
+  return (await membersOf(invite.householdId)).some((m) => m.id === invite.createdBy && m.role === 'owner');
 }
 
 /** Invites still waiting to be used: into your household (for its owner), or to start one (for whoever runs the site). */
@@ -101,7 +130,7 @@ export async function cancelInvite(user: User, id: unknown): Promise<void> {
   if (!allowed) throw new HttpError(404, 'That invite is gone already.');
   if (invite.usedAt) throw new HttpError(409, `${invite.name} has already used it.`);
   await getRepo().deleteInvite(invite.id);
-  await record(user, 'invite-cancelled', { detail: invite.name });
+  await record(invite.kind === 'household' ? { ...user, household: invite.householdId } : user, 'invite-cancelled', { detail: invite.name });
 }
 
 /** The invite behind a link's secret, if it can still be used; otherwise why not, as an HttpError. */
@@ -114,6 +143,7 @@ export async function findInvite(token: unknown): Promise<{ invite: Invite; view
   if (invite.expiresAt <= new Date().toISOString()) throw new HttpError(410, `That invite has run out (they last ${INVITE_DAYS} days). Ask whoever sent it for a new one.`);
   const household = invite.kind === 'member' ? await getHousehold(invite.householdId) : null;
   if (invite.kind === 'member' && !household) throw new HttpError(410, 'The household that invite was for is gone.');
+  if (!(await makerCanStill(invite))) throw new HttpError(410, 'Whoever sent that invite can’t invite people any more. Ask one of the household’s owners for a new one.');
   return {
     invite,
     view: { kind: invite.kind, from: await nameOf(invite.createdBy), household: household?.name ?? invite.householdName ?? 'a new household', name: invite.name, expiresAt: invite.expiresAt },
@@ -161,7 +191,7 @@ export async function acceptInvite(token: unknown, who: { user: User } | { email
   return user;
 }
 
-/** The cookie that holds an opened invite (and the name the person gave) while they sign in. Only the sign-in routes see it. */
+/** The cookie that holds an invite (and the name the person gave) once they choose to sign in with it. Only the sign-in routes read it. */
 export function inviteCookie(token: string, name = '') {
   return {
     name: INVITE_COOKIE,
@@ -169,7 +199,7 @@ export function inviteCookie(token: string, name = '') {
     httpOnly: true,
     secure: config.isProduction,
     sameSite: 'lax' as const,
-    path: '/api/auth',
+    path: '/',
     maxAge: token ? HOLD_MINUTES * 60 : 0,
   };
 }

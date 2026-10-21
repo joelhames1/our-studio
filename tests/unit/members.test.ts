@@ -4,7 +4,7 @@
 // and the list of signed-in browsers with "sign out everywhere".
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { tempRepo } from './helpers';
+import { tempRepo, signedIn } from './helpers';
 import { POST as devicesRoute } from '@/app/api/account/devices/route';
 import { POST as acceptRoute } from '@/app/api/auth/invite/accept/route';
 import { POST as openRoute } from '@/app/api/auth/invite/route';
@@ -16,21 +16,24 @@ import { POST as switchRoute } from '@/app/api/household/switch/route';
 import { POST as logout } from '@/app/api/logout/route';
 import { GET as nightly } from '@/app/api/cron/backup/route';
 import { preset } from '@/lib/design/occasions';
-import type { User } from '@/lib/engine/types';
+import type { Decision, User } from '@/lib/engine/types';
 import { closeAccount, eraseDue, eraseEmptyHousehold, eraseNow, keepData, peopleOverview, restore, switchOff } from '@/lib/server/account';
 import { activityFor } from '@/lib/server/activity';
 import { COOKIE, sessionCookie, userForSession, USERS } from '@/lib/server/auth';
 import { RESEND } from '@/lib/server/email';
 import { GOOGLE_TOKEN } from '@/lib/server/google';
 import { acceptInvite, cancelInvite, createInvite, findInvite, INVITE_COOKIE, inviteCookie, openInvites } from '@/lib/server/invites';
-import { leaveHousehold, removeMember, setRole } from '@/lib/server/membership';
+import { leaveHousehold, makeOwner, removeMember, setRole } from '@/lib/server/membership';
+import { archiveProject } from '@/lib/server/archive';
+import { approve, reopen } from '@/lib/server/decisions';
+import { createShare, openShare } from '@/lib/server/printers';
 import { forgetDirectory, getHousehold, membersOf, pastMembersOf, personByEmail, userById } from '@/lib/server/people';
 import { createProject } from '@/lib/server/projects';
 import type { LocalRepo } from '@/lib/server/repo/local';
 import { deviceOf, devicesOf, signOutDevice, signOutEverywhere } from '@/lib/server/sessions';
 import { householdBudget } from '@/lib/server/spend';
 import { projectSummaries } from '@/lib/server/overview';
-import { canManage, projectState, react } from '@/lib/server/studio';
+import { approverOf, canManage, getShirtProject, projectState, react } from '@/lib/server/studio';
 
 const jar = vi.hoisted(() => ({ value: '', household: '' }));
 vi.mock('next/headers', () => ({
@@ -137,12 +140,14 @@ describe('invites', () => {
     const { sam } = await riveras(repo);
     const { link } = await createInvite(sam, { name: 'Leo' }, SITE);
 
-    // Opening the link holds it in this browser, with the name they give.
+    // Opening the link only shows it: nothing is held for a sign-in yet.
     const opened = await openRoute(post('/api/auth/invite', { token: tokenOf(link) }), ctx);
     expect(await opened.json()).toMatchObject({ invite: { from: 'Sam', household: 'The Riveras', name: 'Leo' } });
-    const named = await openRoute(post('/api/auth/invite', { token: tokenOf(link), name: 'Leonardo' }), ctx);
+    expect(setCookie(opened, INVITE_COOKIE)).toBeUndefined();
+    // Choosing to sign in with it holds it in this browser, with the name they give.
+    const named = await openRoute(post('/api/auth/invite', { token: tokenOf(link), name: 'Leonardo', hold: true }), ctx);
     const held = setCookie(named, INVITE_COOKIE)!;
-    expect(named.headers.getSetCookie().find((c) => c.startsWith(INVITE_COOKIE))).toMatch(/Path=\/api\/auth; .*HttpOnly/i);
+    expect(named.headers.getSetCookie().find((c) => c.startsWith(INVITE_COOKIE))).toMatch(/Path=\/; .*HttpOnly/i);
     // A reload: no secret in the body, the held one is used.
     expect((await openRoute(post('/api/auth/invite', {}, `${INVITE_COOKIE}=${held}`), ctx)).status).toBe(200);
 
@@ -200,7 +205,7 @@ describe('invites', () => {
     expect((await findInvite(tokenOf(first.link))).invite.usedAt).toBeUndefined();
 
     const { link } = await createInvite(sam, { name: 'Erin' }, SITE);
-    jar.value = sessionCookie('erin').value;
+    jar.value = await signedIn('erin');
     const res = await acceptRoute(post('/api/auth/invite/accept', { token: tokenOf(link) }), ctx);
     expect(res.status).toBe(200);
     expect(setCookie(res, 'studio_household')).toBe('riveras');
@@ -234,7 +239,7 @@ describe('arriving on another server', () => {
     await repo.savePerson({ id: 'leo', name: 'Leo', email: 'leo@example.com', createdAt: at });
     await repo.saveMembership({ householdId: 'riveras', personId: 'leo', role: 'member', joinedAt: at });
     await repo.saveMembership({ householdId: 'first', personId: 'sam', role: 'member', joinedAt: at });
-    expect(await userForSession(sessionCookie('leo').value)).toMatchObject({ id: 'leo', household: 'riveras' });
+    expect(await userForSession(await signedIn('leo'))).toMatchObject({ id: 'leo', household: 'riveras' });
     await new Promise((r) => setTimeout(r, 2100));
     expect(await userById('sam', 'first')).toMatchObject({ household: 'first', households: ['riveras', 'first'] });
   });
@@ -305,7 +310,7 @@ describe('who’s in the household', () => {
     const { sam } = await riveras(repo);
     await repo.saveMembership({ householdId: 'first', personId: 'sam', role: 'member', joinedAt: '2026-10-02T00:00:00.000Z' });
     forgetDirectory();
-    jar.value = sessionCookie('sam').value;
+    jar.value = await signedIn('sam');
     const ok = await switchRoute(post('/api/household/switch', { household: 'first' }), ctx);
     expect(setCookie(ok, 'studio_household')).toBe('first');
     expect((await switchRoute(post('/api/household/switch', { household: 'nowhere' }), ctx)).status).toBe(404);
@@ -363,7 +368,7 @@ describe('closing, switching off, restoring and erasing accounts', () => {
   it('switched off by Joel: an invite can’t bring them back, a restore does, and old cookies stay dead', async () => {
     const { repo } = tempRepo();
     const { sam } = await riveras(repo);
-    const before = sessionCookie('ana', undefined, Date.now() - 60_000).value;
+    const before = await signedIn('ana', Date.now() - 60_000);
     await expect(switchOff(sam, 'ana')).rejects.toMatchObject({ status: 403 });
     await expect(switchOff(joel, 'joel')).rejects.toMatchObject({ status: 403 });
     await switchOff(joel, 'ana');
@@ -381,7 +386,7 @@ describe('closing, switching off, restoring and erasing accounts', () => {
     await restore(joel, 'ana');
     expect(await userById('ana')).toMatchObject({ household: 'riveras', role: 'member' });
     expect(await userForSession(before)).toBeNull();
-    expect(await userForSession(sessionCookie('ana').value)).toMatchObject({ id: 'ana' });
+    expect(await userForSession(await signedIn('ana'))).toMatchObject({ id: 'ana' });
     expect((await activityFor(sam)).entries.map((e) => `${e.by} ${e.action}`)).toContain('joel account-restored');
   });
 
@@ -461,7 +466,7 @@ describe('where you’re signed in', () => {
   it('lists each browser, signs one out, and signs out everywhere else without touching this one', async () => {
     const { repo } = tempRepo();
     const { sam } = await riveras(repo);
-    // An older cookie from before the list, then this browser signing in with a code.
+    // A cookie that isn't on the list (from before it, or forged with the right key) counts for nothing; then this browser signs in with a code.
     const old = sessionCookie('sam', undefined, Date.now() - 60_000).value;
     const asked = (await send(post('/api/auth/code', { email: 'sam@example.com' }), ctx)).headers.getSetCookie();
     const res = await check(post('/api/auth/code/check', { code: emails[0].subject.slice(0, 6) }, asked.map((c) => c.split(';')[0]).join('; ')), ctx);
@@ -473,7 +478,7 @@ describe('where you’re signed in', () => {
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ device: 'iPhone · Safari', via: 'an email code', current: true });
     expect(await userForSession(here)).toMatchObject({ id: 'sam' });
-    expect(await userForSession(old)).toMatchObject({ id: 'sam' });
+    expect(await userForSession(old)).toBeNull();
 
     // A second browser, signed out from the list.
     await repo.saveSession({ id: 'abcdefghjkmnpqrs', personId: 'sam', createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), device: 'Mac · Chrome', via: 'Google' });
@@ -483,7 +488,7 @@ describe('where you’re signed in', () => {
     await signOutDevice(sam, 'abcdefghjkmnpqrs');
     expect(await userForSession(second)).toBeNull();
 
-    // Everywhere else: the old cookie stops, this browser carries on with a fresh one.
+    // Everywhere else: every other browser stops, this one carries on with a fresh cookie.
     jar.value = here;
     const all = await devicesRoute(post('/api/account/devices', { action: 'everywhere' }), ctx);
     expect(all.status).toBe(200);
@@ -506,5 +511,102 @@ describe('where you’re signed in', () => {
     expect(deviceOf('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36')).toBe('Android · Chrome');
     expect(deviceOf('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) FxiOS/130.0 Mobile/15E148')).toBe('iPhone · Firefox');
     expect(deviceOf(null)).toBe('A device · a browser');
+  });
+});
+
+describe('when someone goes', () => {
+  const order = { garment: 'tee' as const, color: 'navy', preset: 'standard', sizes: [{ who: 'Abuela', size: 'M' as const, qty: 1 }] };
+
+  it('the invites they made stop: made a member again, taken out, or one that slipped through', async () => {
+    const { repo } = tempRepo();
+    const { sam } = await riveras(repo);
+    await setRole(sam, 'ana', 'owner');
+    const anaOwner = (await userById('ana', 'riveras'))!;
+    const a = await createInvite(anaOwner, { name: 'Leo' }, SITE);
+    const b = await createInvite(anaOwner, { name: 'Mo' }, SITE);
+
+    await setRole(sam, 'ana', 'member');
+    await expect(findInvite(tokenOf(a.link))).rejects.toMatchObject({ status: 404 });
+    // One made in the same moment she was demoted (or before this rule) still checks she's an owner when it's used.
+    await repo.saveInvite(b.invite);
+    await expect(findInvite(tokenOf(b.link))).rejects.toMatchObject({ status: 410 });
+    await expect(acceptInvite(tokenOf(b.link), { email: 'ana.again@example.com' })).rejects.toMatchObject({ status: 410 });
+    expect(await personByEmail('ana.again@example.com')).toBeNull();
+
+    await setRole(sam, 'ana', 'owner');
+    const c = await createInvite((await userById('ana', 'riveras'))!, { name: 'Back door' }, SITE);
+    await removeMember(sam, 'ana');
+    await expect(findInvite(tokenOf(c.link))).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('an owner who’s just been taken out can’t act on a server whose copy of the household is a few seconds old', async () => {
+    const { repo } = tempRepo();
+    const { sam } = await riveras(repo);
+    await setRole(sam, 'ana', 'owner');
+    const anaOwner = (await userById('ana', 'riveras'))!;
+    // Sam takes Ana's ownership away somewhere else; this server's copy still has her as an owner.
+    await repo.saveMembership({ householdId: 'riveras', personId: 'ana', role: 'member', joinedAt: '2026-10-01T00:00:01.000Z' });
+    await expect(removeMember(anaOwner, 'sam')).rejects.toMatchObject({ status: 403 });
+    await expect(setRole(anaOwner, 'sam', 'member')).rejects.toMatchObject({ status: 403 });
+    expect((await membersOf('riveras')).find((m) => m.id === 'sam')?.role).toBe('owner');
+  });
+
+  it('signs them out everywhere when it was their last household, so an old cookie stays dead if they come back', async () => {
+    const { repo } = tempRepo();
+    const { sam } = await riveras(repo);
+    const cookie = await signedIn('ana');
+    expect(await userForSession(cookie)).toMatchObject({ id: 'ana' });
+    await removeMember(sam, 'ana');
+    expect(await repo.listSessions('ana')).toEqual([]);
+    const { link } = await createInvite(sam, { name: 'Ana' }, SITE);
+    await acceptInvite(tokenOf(link), { email: 'ana@example.com' });
+    expect(await userById('ana')).toMatchObject({ household: 'riveras' });
+    expect(await userForSession(cookie)).toBeNull();
+    expect(await userForSession(await signedIn('ana'))).toMatchObject({ id: 'ana' });
+  });
+
+  it('turns off printer links they made, and putting a project away turns off all of its links', async () => {
+    const { repo } = tempRepo();
+    const { sam, ana } = await riveras(repo);
+    const project = await birthday(sam);
+    const state = await projectState(project.id, sam);
+    const d = await approve(sam, project.id, { ...order, optionId: state.options[0].id });
+    await repo.saveDecision({ ...(d as Decision), status: 'ready' });
+    const byAna = await createShare(ana, project.id, null);
+    const bySam = await createShare(sam, project.id, null);
+    expect(await openShare(byAna.token)).not.toBeNull();
+
+    await removeMember(sam, 'ana');
+    expect(await openShare(byAna.token)).toBeNull();
+    expect(await openShare(bySam.token)).not.toBeNull();
+    await archiveProject(sam, project.id);
+    expect(await openShare(bySam.token)).toBeNull();
+  });
+
+  it('hands the final say on approved projects over too, so somebody can still reopen them', async () => {
+    const { repo } = tempRepo();
+    const { sam, ana } = await riveras(repo);
+    const project = await birthday(ana);
+    const state = await projectState(project.id, ana);
+    await approve(ana, project.id, { ...order, optionId: state.options[0].id });
+    await leaveHousehold(ana);
+    expect(approverOf(await getShirtProject(project.id))).toBe('sam');
+    await reopen(sam, project.id);
+    expect((await getShirtProject(project.id)).status).not.toBe('approved');
+  });
+
+  it('lets Joel give a household with nobody left owning it an owner, and only then', async () => {
+    const { repo } = tempRepo();
+    const { sam } = await riveras(repo);
+    await expect(makeOwner(joel, 'riveras', 'ana')).rejects.toMatchObject({ status: 409 });
+    await expect(makeOwner(sam, 'riveras', 'ana')).rejects.toMatchObject({ status: 403 });
+    // Two owners taking each other out at the same moment could leave nobody; here, straight in storage.
+    await repo.saveMembership({ householdId: 'riveras', personId: 'sam', role: 'member', joinedAt: '2026-10-01T00:00:00.000Z' });
+    forgetDirectory();
+    expect((await peopleOverview(joel)).ownerless).toEqual([{ id: 'riveras', name: 'The Riveras', members: [{ id: 'sam', name: 'Sam' }, { id: 'ana', name: 'Ana' }] }]);
+    await expect(makeOwner(joel, 'riveras', 'leo')).rejects.toMatchObject({ status: 404 });
+    await makeOwner(joel, 'riveras', 'ana');
+    expect((await userById('ana', 'riveras'))!.role).toBe('owner');
+    expect((await peopleOverview(joel)).ownerless).toEqual([]);
   });
 });

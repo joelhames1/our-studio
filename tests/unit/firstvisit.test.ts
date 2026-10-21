@@ -3,12 +3,12 @@
 // welcome shows to people who arrived by invite until they've seen it or
 // started something.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { tempRepo } from './helpers';
+import { signedIn, tempRepo } from './helpers';
 import { POST as welcomed } from '@/app/api/account/welcomed/route';
 import { POST as create } from '@/app/api/projects/route';
 import { preset } from '@/lib/design/occasions';
 import type { User } from '@/lib/engine/types';
-import { sessionCookie, USERS } from '@/lib/server/auth';
+import { USERS } from '@/lib/server/auth';
 import { archivedCount, projectSummaries } from '@/lib/server/overview';
 import { forgetDirectory, needsWelcome, userById } from '@/lib/server/people';
 import { createProject } from '@/lib/server/projects';
@@ -80,7 +80,7 @@ describe('a new household’s first visit', () => {
     expect(await needsWelcome(erin)).toBe(false);
     expect(await needsWelcome(sam)).toBe(true);
 
-    jar.value = sessionCookie('sam').value;
+    jar.value = await signedIn('sam');
     const p = preset('trip');
     const made = await create(post('/api/projects', { occasion: 'trip', basics: { ...p.example, title: 'Lake week' }, copy: p.copyIdeas(p.example)[0] }), ctx);
     expect(made.status).toBe(200);
@@ -91,7 +91,7 @@ describe('a new household’s first visit', () => {
     await repo.saveMembership({ householdId: 'riveras', personId: 'ana', role: 'member', joinedAt: new Date().toISOString() });
     forgetDirectory();
     expect(await needsWelcome((await userById('ana'))!)).toBe(true);
-    jar.value = sessionCookie('ana').value;
+    jar.value = await signedIn('ana');
     expect((await welcomed(post('/api/account/welcomed', {}), ctx)).status).toBe(200);
     expect(await needsWelcome((await userById('ana'))!)).toBe(false);
     expect((await repo.loadDirectory())!.people.find((x) => x.id === 'ana')!.welcomedAt).toBeTruthy();

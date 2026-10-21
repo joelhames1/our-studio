@@ -2,46 +2,57 @@
 // its owners make someone else an owner (or not), take someone out, and
 // anyone can leave. A household always keeps at least one owner, and whoever
 // runs the site always keeps a household, so nobody locks themselves (or
-// Joel) out. When someone goes, the final say on anything not yet approved
-// passes to whoever's looking after the household. Nothing's deleted: the
-// membership is marked ended, so owners see past members and can invite them
-// back, and their hearts count again if they return.
+// Joel) out. When someone goes, the final say on their projects passes to
+// whoever's looking after the household, the invites and printer links they
+// made stop working, and if it was their last household they're signed out
+// everywhere. Nothing's deleted: the membership is marked ended, so owners see
+// past members and can invite them back, and their hearts count again if they
+// return. Every change reads who's in the household fresh, not from a copy
+// that could be seconds old on this server.
 import 'server-only';
 import type { HouseholdId, HouseholdRole, User, UserId } from '@/lib/engine/types';
 import { record } from './activity';
 import { HttpError } from './errors';
-import { directoryStored, forgetDirectory, membersOf, personById, type Member } from './people';
+import { cancelInvitesBy } from './invites';
+import { directoryStored, forgetDirectory, membersOf, personById, refreshDirectory, userById, type Member } from './people';
+import { revokeSharesBy } from './printers';
 import { getRepo } from './repo';
+import { endAllSessions } from './sessions';
 import { approverOf, householdOf, type ShirtProject } from './studio';
 
 async function stored() {
   if (!(await directoryStored())) throw new HttpError(503, 'Households aren’t set up in the database yet. Run supabase/migrations/0006_households.sql (it’s on the Setup page).');
 }
 
-function ownerOf(user: User, household: HouseholdId) {
-  if (user.roles[household] !== 'owner') throw new HttpError(403, 'Only the household’s owners can change who’s in it.');
+/** Who's in the household right now, read fresh, after checking `user` is still one of its owners. */
+async function asOwner(user: User, household: HouseholdId): Promise<Member[]> {
+  await refreshDirectory();
+  const members = await membersOf(household);
+  if (members.find((m) => m.id === user.id)?.role !== 'owner') throw new HttpError(403, 'Only the household’s owners can change who’s in it.');
+  return members;
 }
 
-async function memberOf(household: HouseholdId, personId: unknown): Promise<{ members: Member[]; them: Member }> {
-  const members = await membersOf(household);
+function memberOf(members: Member[], personId: unknown): Member {
   const them = members.find((m) => m.id === personId);
   if (!them) throw new HttpError(404, 'They’re not in the household any more.');
-  return { members, them };
+  return them;
 }
 
 /** An owner makes someone an owner, or makes an owner a member again. There's always at least one owner. */
 export async function setRole(user: User, personId: unknown, role: unknown): Promise<void> {
   const household = user.household;
   await stored();
-  ownerOf(user, household);
   if (role !== 'owner' && role !== 'member') throw new HttpError(400, 'Owner or member?');
-  const { members, them } = await memberOf(household, personId);
+  const members = await asOwner(user, household);
+  const them = memberOf(members, personId);
   if (them.role === role) return;
   if (role === 'member' && members.filter((m) => m.role === 'owner').length < 2) {
     throw new HttpError(409, `${them.id === user.id ? 'You’re' : `${them.name} is`} the only owner. Make someone else an owner first.`);
   }
   await getRepo().saveMembership({ householdId: household, personId: them.id, role: role as HouseholdRole, joinedAt: them.joinedAt });
   forgetDirectory();
+  // A member can't let people in, so invites they made as an owner stop.
+  if (role === 'member') await cancelInvitesBy(them.id, household);
   await record(user, 'role-changed', { detail: `${them.id === user.id ? 'themselves' : them.name} ${role === 'owner' ? 'an owner' : 'a member'}` });
 }
 
@@ -49,9 +60,8 @@ export async function setRole(user: User, personId: unknown, role: unknown): Pro
 export async function removeMember(user: User, personId: unknown): Promise<void> {
   const household = user.household;
   await stored();
-  ownerOf(user, household);
   if (personId === user.id) throw new HttpError(400, 'To go yourself, use Leave the household.');
-  const { them } = await memberOf(household, personId);
+  const them = memberOf(await asOwner(user, household), personId);
   if ((await personById(them.id))?.siteAdmin) throw new HttpError(403, `${them.name} runs the site, so only they can leave.`);
   await handOver(household, them.id, user.id);
   await endMembership(household, them, 'removed', user.id);
@@ -62,7 +72,9 @@ export async function removeMember(user: User, personId: unknown): Promise<void>
 export async function leaveHousehold(user: User, household: HouseholdId = user.household): Promise<void> {
   await stored();
   if (!user.households.includes(household)) throw new HttpError(404, 'You’re not in that household.');
+  await refreshDirectory();
   const members = await membersOf(household);
+  if (!members.some((m) => m.id === user.id)) throw new HttpError(404, 'You’re not in that household.');
   const others = members.filter((m) => m.id !== user.id);
   const owners = others.filter((m) => m.role === 'owner');
   if (!others.length) throw new HttpError(409, 'You’re the only one in it, so there’d be nobody left. To step away from it, close your account instead (on You); nothing in it is deleted.');
@@ -74,19 +86,46 @@ export async function leaveHousehold(user: User, household: HouseholdId = user.h
   await record({ ...user, household }, 'left');
 }
 
-/** Marks someone's membership ended, keeping it on record. */
+/**
+ * Marks someone's membership ended, keeping it on record. The invites and
+ * printer links they made there stop, and if that was their last household,
+ * every browser they're signed in on is signed out.
+ */
 export async function endMembership(household: HouseholdId, m: Pick<Member, 'id' | 'role' | 'joinedAt'>, ended: 'removed' | 'left' | 'closed' | 'switched-off', by: UserId, at = new Date().toISOString()): Promise<void> {
   await getRepo().saveMembership({ householdId: household, personId: m.id, role: m.role, joinedAt: m.joinedAt, endedAt: at, endedBy: by, ended });
   forgetDirectory();
+  await cancelInvitesBy(m.id, household);
+  await revokeSharesBy(m.id, household);
+  if (!(await userById(m.id))) await endAllSessions(m.id, Date.parse(at));
 }
 
 /**
- * Before `from` goes: the final say on the household's projects that aren't
- * approved yet passes to `to`, and the log says so.
+ * For whoever runs the site: makes someone an owner of a household that has
+ * none (two owners who took each other out at the same moment, say), so it
+ * can be looked after again.
+ */
+export async function makeOwner(admin: User, householdId: unknown, personId: unknown): Promise<void> {
+  if (!admin.admin) throw new HttpError(403, 'Only whoever runs the site can do that.');
+  await stored();
+  await refreshDirectory();
+  const household = typeof householdId === 'string' ? householdId : '';
+  const members = await membersOf(household);
+  const them = memberOf(members, personId);
+  const owners = members.filter((x) => x.role === 'owner');
+  if (owners.length) throw new HttpError(409, `It has an owner already (${owners[0].name}), who can do that on the Household page.`);
+  await getRepo().saveMembership({ householdId: household, personId: them.id, role: 'owner', joinedAt: them.joinedAt });
+  forgetDirectory();
+  await record({ ...admin, household }, 'role-changed', { detail: `${them.name} an owner` });
+}
+
+/**
+ * Before `from` goes: the final say on the household's projects passes to
+ * `to`, and the log says so. Approved ones too, so somebody can still reopen
+ * them.
  */
 export async function handOver(household: HouseholdId, from: UserId, to: UserId): Promise<void> {
   const repo = getRepo();
-  const projects = ((await repo.listProjects()) as ShirtProject[]).filter((p) => householdOf(p) === household && approverOf(p) === from && p.status !== 'approved');
+  const projects = ((await repo.listProjects()) as ShirtProject[]).filter((p) => householdOf(p) === household && approverOf(p) === from);
   if (!projects.length) return;
   const [fromName, toName] = await Promise.all([personById(from), personById(to)]).then((ps) => ps.map((p) => p?.name ?? 'someone'));
   const by = { id: to, name: toName, admin: false, household, role: 'owner' as const, households: [household], roles: { [household]: 'owner' as const } };

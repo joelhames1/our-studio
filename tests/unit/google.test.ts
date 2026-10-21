@@ -10,9 +10,10 @@ import { GET as callback } from '@/app/api/auth/callback/route';
 import { GET as start } from '@/app/api/auth/google/route';
 import { POST as linkSession } from '@/app/api/session/route';
 import { COOKIE, sessionCookie, userForLinkToken, userForSession, USERS } from '@/lib/server/auth';
+import { signSession } from '@/lib/server/session';
 import { config } from '@/lib/server/config';
 import { GOOGLE_TOKEN } from '@/lib/server/google';
-import { tempRepo } from './helpers';
+import { signedIn as listedSession, tempRepo } from './helpers';
 
 const SITE = 'https://studio.example.com';
 const KEY = 'sb_secret_test_not_real';
@@ -95,7 +96,7 @@ describe('continue with Google', () => {
     expect(to.searchParams.get('redirect_to')).toBe(`${SITE}/api/auth/callback`);
     expect(to.searchParams.get('code_challenge_method')).toBe('s256');
     const cookie = res.cookies.get('studio_pkce')!;
-    expect(cookie).toMatchObject({ httpOnly: true, sameSite: 'lax', path: '/api/auth', maxAge: 600 });
+    expect(cookie).toMatchObject({ httpOnly: true, sameSite: 'lax', path: '/', maxAge: 600 });
     expect(cookie.value).toMatch(/^[\w-]{43}$/);
     // Google only ever sees the challenge, never the verifier.
     expect(to.searchParams.get('code_challenge')).toBe(createHash('sha256').update(cookie.value).digest('base64url'));
@@ -283,7 +284,7 @@ describe('straight to Google, with the site’s own client', () => {
 
 describe('sessions with Google, and switching links off', () => {
   it('signs sessions without any link tokens, and SESSION_VERSION still signs everyone out', async () => {
-    const joel = sessionCookie('joel').value;
+    const joel = await listedSession('joel');
     expect(await userForSession(joel)).toEqual(USERS.joel);
     expect(joel).not.toContain(KEY);
     process.env.SESSION_VERSION = '2';
@@ -293,7 +294,7 @@ describe('sessions with Google, and switching links off', () => {
   it('turns links off without signing anyone out', async () => {
     process.env.ERIN_LINK_TOKEN = ERIN_TOKEN;
     process.env.JOEL_LINK_TOKEN = JOEL_TOKEN;
-    const fromLink = sessionCookie('erin').value;
+    const fromLink = await listedSession('erin');
     process.env.SIGN_IN_LINKS = 'off';
     expect(config.linksConfigured).toBe(false);
     expect(config.authConfigured).toBe(true);
@@ -305,5 +306,17 @@ describe('sessions with Google, and switching links off', () => {
     );
     expect(res.status).toBe(410);
     expect(res.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('never signs a session with a link token, so a link someone once saw can’t be turned into one', async () => {
+    process.env.ERIN_LINK_TOKEN = ERIN_TOKEN;
+    process.env.JOEL_LINK_TOKEN = JOEL_TOKEN;
+    // Links still on, and the forger even picks a session id that's really on Joel's list.
+    const real = await listedSession('joel');
+    const sid = real.split('.')[2];
+    for (const forged of [signSession('joel', JOEL_TOKEN, '1'), signSession('joel', JOEL_TOKEN, '1', Date.now(), sid)]) {
+      expect(await userForSession(forged)).toBeNull();
+    }
+    expect(await userForSession(real)).toEqual(USERS.joel);
   });
 });

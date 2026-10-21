@@ -3,8 +3,8 @@
 // Safari", how they signed in, when, and when it was last used) and its id goes
 // in the session cookie. Every request checks the record is still there,
 // remembered for half a minute per server, so signing a browser out takes
-// effect within that. "Sign out everywhere" also ends older cookies from
-// before this list, by noting the time on the person.
+// effect within that. Once the list exists, a cookie that isn't on it doesn't
+// count, and if the list can't be read nobody's let in on trust.
 import 'server-only';
 import { customAlphabet } from 'nanoid';
 import type { SessionRecord, User, UserId } from '@/lib/engine/types';
@@ -52,7 +52,29 @@ export function deviceOf(ua: string | null | undefined): string {
   return `${os} · ${browser}`;
 }
 
-/** Records a new signed-in browser and returns its id; null before the setup file (0007), when cookies carry no id as before. */
+const g2 = globalThis as typeof globalThis & { __studioSessionsListed?: { at: number; listed: boolean } };
+
+/** Whether the list of signed-in browsers exists yet (the setup file 0007). Once it does, that's for good; until then, asked again every few minutes. */
+export async function sessionsListed(): Promise<boolean> {
+  const known = g2.__studioSessionsListed;
+  if (known && (known.listed || Date.now() - known.at < 300_000)) return known.listed;
+  let listed = true;
+  try {
+    listed = (await getRepo().listSessions('nobody')) !== null;
+  } catch (e) {
+    // Can't tell: treat it as there, so a cookie without a place on the list isn't waved through.
+    console.error('Couldn’t check for the list of signed-in browsers:', (e as Error).message);
+    return true;
+  }
+  g2.__studioSessionsListed = { at: Date.now(), listed };
+  return listed;
+}
+
+/**
+ * Records a new signed-in browser and returns its id; null before the setup
+ * file (0007), when cookies carry no id as before. If it can't be recorded,
+ * signing in fails rather than handing out a cookie nobody could sign out.
+ */
 export async function openSession(personId: UserId, userAgent: string | null, via: string): Promise<string | null> {
   const repo = getRepo();
   try {
@@ -64,7 +86,7 @@ export async function openSession(personId: UserId, userAgent: string | null, vi
     return rec.id;
   } catch (e) {
     console.error('Couldn’t record the signed-in browser:', (e as Error).message);
-    return null;
+    throw new HttpError(503, 'Signing in didn’t go through just now. Try again in a minute.');
   }
 }
 
@@ -75,8 +97,7 @@ function remember(sid: string, rec: SessionRecord | null) {
 
 /**
  * Whether this browser is still signed in. If the list can't be reached, it
- * stays signed in (the cookie's signature still checks out); signing out
- * just takes effect once it can.
+ * isn't, for now: the cookie stays, and works again once the list is back.
  */
 export async function sessionAlive(sid: string, personId: UserId): Promise<boolean> {
   const hit = seen.get(sid);
@@ -86,7 +107,7 @@ export async function sessionAlive(sid: string, personId: UserId): Promise<boole
       rec = await getRepo().getSession(sid);
     } catch (e) {
       console.error('Couldn’t check the signed-in browser:', (e as Error).message);
-      return true;
+      return false;
     }
     remember(sid, rec);
   }
@@ -143,6 +164,21 @@ export async function signOutEverywhere(user: User, keep?: string): Promise<numb
     remember(s.id, null);
   }
   return now;
+}
+
+/**
+ * Ends every browser someone is signed in on, and any cookie of theirs from
+ * before now: for someone who no longer belongs to any household, so a
+ * cookie left on a shared or stolen phone doesn't come back to life if
+ * they're invited back.
+ */
+export async function endAllSessions(personId: UserId, at = Date.now()): Promise<void> {
+  const repo = getRepo();
+  const person = await personById(personId);
+  if (person) await repo.savePerson({ ...person, signedOutAt: new Date(Math.floor(at / 1000) * 1000).toISOString() });
+  await repo.deleteSessionsOf(personId);
+  for (const [sid, hit] of seen) if (hit.rec?.personId === personId) remember(sid, null);
+  forgetDirectory();
 }
 
 /** Signing out on this browser: off the list too, so a copy of its cookie is no good either. */

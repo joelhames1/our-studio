@@ -57,7 +57,8 @@ function outcomes(rows: SpendEntry[]): Map<string, SpendEntry[]> {
  * at the provider isn't worth a warning; the next call that works clears it.
  */
 export async function aiTrouble(): Promise<ServiceTrouble[]> {
-  const rows = await getRepo().listSpendSince(new Date(Date.now() - 30 * 86_400_000).toISOString());
+  // The newest calls are what matter here; a month can hold more than one read returns.
+  const rows = await getRepo().listSpendSince(new Date(Date.now() - 30 * 86_400_000).toISOString(), { newest: 1000 });
   const found: ServiceTrouble[] = [];
   for (const [provider, calls] of outcomes(rows)) {
     const [latest] = calls;

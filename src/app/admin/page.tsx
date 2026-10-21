@@ -50,6 +50,8 @@ export default async function AdminPage() {
   const proto = h.get('x-forwarded-proto') ?? 'http';
   const origin = `${proto}://${h.get('host')}`;
   const s = await setupStatus(origin);
+  /** What the households with limits of their own could spend between them. */
+  const limitsTotal = s.budget.households.reduce((a, h) => a + (h.limit ?? 0), 0);
   const claudeTrouble = s.trouble.find((t) => t.provider === 'anthropic');
   const artTrouble = s.trouble.find((t) => t.provider === s.art.provider);
 
@@ -359,7 +361,10 @@ export default async function AdminPage() {
           )}
         </Row>
 
-        <Row ok={s.budget.spent < s.budget.limit * 0.8 && s.budget.households.every((h) => h.limit === null || h.spent < h.limit * 0.8) ? true : 'warn'} title="AI spending this month">
+        <Row
+          ok={s.budget.spent < s.budget.limit * 0.8 && s.budget.households.every((h) => h.limit === null || h.spent < h.limit * 0.8) && limitsTotal <= s.budget.limit ? true : 'warn'}
+          title="AI spending this month"
+        >
           <div className="h-2.5 overflow-hidden rounded-full bg-sand-2">
             <div className="h-full rounded-full bg-lagoon" style={{ width: `${Math.min(100, (s.budget.spent / Math.max(s.budget.limit, 0.01)) * 100)}%` }} />
           </div>
@@ -373,6 +378,12 @@ export default async function AdminPage() {
                 unless you give it one. Whatever the limits, everything stops once the site&apos;s budget is used up.
               </p>
               <HouseholdBudgets households={s.budget.households} editable={s.budget.editable} />
+              {limitsTotal > s.budget.limit ? (
+                <p className="text-sm text-coral">
+                  The households&apos; own limits add up to ${limitsTotal}, more than the site&apos;s ${s.budget.limit}. If they all used theirs, the site&apos;s budget would run out
+                  for everyone, yours included. Raise <Code>MONTHLY_BUDGET_USD</Code> as households join, or lower a household&apos;s limit.
+                </p>
+              ) : null}
               {!s.budget.editable ? <p className="text-sm text-muted">Changing them needs the households setup file run (see Households above).</p> : null}
             </>
           ) : null}

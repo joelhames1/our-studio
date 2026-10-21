@@ -13,9 +13,31 @@ interface InviteView {
   expiresAt: string;
 }
 
+/** This tab's copy of the secret, so a reload still works once it's out of the address bar. Gone when the tab closes. */
+const KEPT = 'studio-join';
+const kept = {
+  get: () => {
+    try {
+      return sessionStorage.getItem(KEPT) ?? '';
+    } catch {
+      return '';
+    }
+  },
+  set: (v: string) => {
+    try {
+      if (v) sessionStorage.setItem(KEPT, v);
+      else sessionStorage.removeItem(KEPT);
+    } catch {
+      // Private mode: a reload just needs the link again.
+    }
+  },
+};
+
 /**
  * An invite, opened: who it's from and what for, then a way in. Signed in
  * already, it's one tap; otherwise your name, then Google or an emailed code.
+ * Opening it only shows it: nothing is held for a sign-in until the person
+ * presses Continue with Google or asks for a code here.
  */
 export function JoinInvite({ me, google, codes }: { me: { name: string } | null; google: boolean; codes: boolean }) {
   const [token, setToken] = useState('');
@@ -30,8 +52,12 @@ export function JoinInvite({ me, google, codes }: { me: { name: string } | null;
     if (opened.current) return;
     opened.current = true;
     // Take the secret out of the address bar straight away, so it isn't left in history or shared by accident.
-    const secret = window.location.hash.slice(1);
-    if (secret) window.history.replaceState(null, '', '/join');
+    const fromLink = window.location.hash.slice(1);
+    if (fromLink) {
+      window.history.replaceState(null, '', '/join');
+      kept.set(fromLink);
+    }
+    const secret = fromLink || kept.get();
     setToken(secret);
     http<{ invite: InviteView }>('/api/auth/invite', { body: secret ? { token: secret } : {} })
       .then(({ invite }) => {
@@ -41,9 +67,9 @@ export function JoinInvite({ me, google, codes }: { me: { name: string } | null;
       .catch((e: Error) => setError(e.message));
   }, []);
 
-  // Keeps the name they gave with the invite, for when they come back from signing in.
+  // They've chosen to sign in with it: hold it (and the name they gave) for when they come back.
   const hold = async () => {
-    await http('/api/auth/invite', { body: { ...(token ? { token } : {}), name } });
+    await http('/api/auth/invite', { body: { ...(token ? { token } : {}), name, hold: true } });
   };
 
   const join = async () => {
@@ -51,6 +77,7 @@ export function JoinInvite({ me, google, codes }: { me: { name: string } | null;
     setError('');
     try {
       await http('/api/auth/invite/accept', { body: token ? { token } : {} });
+      kept.set('');
       window.location.assign('/');
     } catch (e) {
       setError((e as Error).message);

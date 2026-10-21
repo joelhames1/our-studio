@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { ERASE_DAYS, peopleOverview } from '@/lib/server/account';
 import { getUser } from '@/lib/server/auth';
 import { directoryStored } from '@/lib/server/people';
-import { EmptyHousehold, PersonCard } from '@/components/PeopleTools';
+import { EmptyHousehold, OwnerlessHousehold, PersonCard } from '@/components/PeopleTools';
 import { Icon } from '@/components/Icon';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,7 @@ export default async function PeoplePage() {
   if (!user) redirect('/');
   if (!user.admin) redirect('/');
   const stored = await directoryStored();
-  const { people, empty } = stored ? await peopleOverview(user) : { people: [], empty: [] };
+  const { people, empty, ownerless } = stored ? await peopleOverview(user) : { people: [], empty: [], ownerless: [] };
   const open = people.filter((p) => p.status === 'open');
   const archived = people.filter((p) => p.status !== 'open');
   const list = 'divide-y divide-line/70 overflow-hidden rounded-3xl bg-white shadow-[var(--shadow-card)]';
@@ -65,6 +65,20 @@ export default async function PeoplePage() {
               <p className="rounded-2xl bg-white px-4 py-3 text-[15px] text-muted shadow-[var(--shadow-card)]">None.</p>
             )}
           </section>
+
+          {ownerless.length ? (
+            <section aria-labelledby="ownerless-heading" className="mt-8">
+              <h2 id="ownerless-heading" className="mb-1 font-display text-xl font-semibold">
+                Households without an owner ({ownerless.length})
+              </h2>
+              <p className="mb-3 text-[15px] text-muted">Nobody there can invite people or look after other people&apos;s projects until someone owns it.</p>
+              <ul className={list}>
+                {ownerless.map((h) => (
+                  <OwnerlessHousehold key={h.id} h={h} />
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           <section aria-labelledby="empty-heading" className="mt-8">
             <h2 id="empty-heading" className="mb-1 font-display text-xl font-semibold">

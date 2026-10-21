@@ -78,9 +78,8 @@ export async function setupStatus(origin: string): Promise<SetupStatus> {
     if (check.ok) {
       spent = await spentThisMonth();
       byHousehold = await spentByHousehold();
-      recent = (await repo.listSpendSince(monthStart()))
+      recent = (await repo.listSpendSince(monthStart(), { newest: 500 }))
         .filter((r) => r.usd > 0 && householdOfSpend(r) === ADMIN.household)
-        .sort((a, b) => b.at.localeCompare(a.at))
         .slice(0, 12);
       trouble = await aiTrouble();
     }

@@ -2,7 +2,7 @@
 // who can reopen, the SVG sanitiser and the print renderer's file guard.
 import sharp from 'sharp';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { tempRepo } from './helpers';
+import { signedIn, tempRepo } from './helpers';
 import { renderDesign } from '@/lib/design/render';
 import { preset } from '@/lib/design/occasions';
 import type { FontSet, ShirtDesign } from '@/lib/design/types';
@@ -72,14 +72,17 @@ describe('sessions', () => {
   });
 
   it('trades a link token for a cookie that never contains it', async () => {
+    tempRepo();
     links();
     expect(await userForLinkToken(ERIN)).toEqual(USERS.erin);
     expect(await userForLinkToken(JOEL)).toEqual(USERS.joel);
     for (const bad of [ERIN.slice(0, -1), ERIN + 'x', '', null, 42, { token: ERIN }, 'dev:erin']) expect(await userForLinkToken(bad)).toBeNull();
-    const c = sessionCookie('erin');
+    const c = { ...sessionCookie('erin'), value: await signedIn('erin') };
     expect(c).toMatchObject({ httpOnly: true, sameSite: 'lax', path: '/' });
     expect(c.value).not.toContain(ERIN);
     expect(await userForSession(c.value)).toEqual(USERS.erin);
+    // Before Supabase, links sign sessions; a cookie that isn't on the list of browsers still doesn't count.
+    expect(await userForSession(sessionCookie('erin').value)).toBeNull();
     // The raw link token is not a session.
     expect(await userForSession(ERIN)).toBeNull();
     process.env.SESSION_VERSION = '2';
@@ -87,6 +90,7 @@ describe('sessions', () => {
   });
 
   it('ignores short tokens and keeps the laptop picker away from real data', async () => {
+    tempRepo();
     process.env.ERIN_LINK_TOKEN = 'short';
     process.env.JOEL_LINK_TOKEN = 'also-too-short-123';
     expect(config.authConfigured).toBe(false);
@@ -94,7 +98,7 @@ describe('sessions', () => {
     expect(await userForLinkToken('short')).toBeNull();
 
     expect(config.devLogin).toBe(true);
-    const dev = sessionCookie('joel').value;
+    const dev = await signedIn('joel');
     expect(await userForSession(dev)).toEqual(USERS.joel);
     process.env.SUPABASE_URL = 'https://example.supabase.co';
     expect(config.devLogin).toBe(false);
