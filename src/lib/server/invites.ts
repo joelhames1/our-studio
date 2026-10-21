@@ -229,13 +229,13 @@ export async function joinOnSignIn(cookie: unknown, email: string): Promise<User
   }
 }
 
-/** Whether this browser holds an invite that can still be used (so an email code may go to an address we don't know yet). */
-export async function holdsInvite(cookie: unknown): Promise<boolean> {
+/** The invite this browser holds, if it can still be used (so an email code may go to an address we don't know yet). */
+export async function heldInvite(cookie: unknown): Promise<Invite | null> {
   const held = readInviteCookie(cookie);
-  if (!held) return false;
+  if (!held) return null;
   return findInvite(held.token).then(
-    () => true,
-    () => false,
+    ({ invite }) => invite,
+    () => null,
   );
 }
 

@@ -138,7 +138,7 @@ describe('email codes', () => {
   });
 
   it('only work for ten minutes, in the browser that asked, for the address it went to', async () => {
-    tempRepo();
+    const { repo } = tempRepo();
     const now = Date.now();
     const { cookie } = await sendCode('erin@example.com', now);
     const code = codeIn();
@@ -150,9 +150,35 @@ describe('email codes', () => {
     const [nonce, , exp, mac] = cookie.split('.');
     const asJoel = [nonce, Buffer.from('joel@example.com').toString('base64url'), exp, mac].join('.');
     await expect(checkCode(asJoel, code, now)).rejects.toMatchObject({ status: 401 });
-    // A later expiry: same.
-    await expect(checkCode([nonce, cookie.split('.')[1], Number(exp) + 3600, mac].join('.'), code, now)).rejects.toMatchObject({ status: 401 });
+    // A later expiry than any code has is made up: refused before anything is counted, so forged cookies can't leave counters behind forever.
+    const hit = vi.spyOn(repo, 'hit');
+    await expect(checkCode([nonce, cookie.split('.')[1], 999999999999, mac].join('.'), code, now)).rejects.toMatchObject({ status: 400 });
+    expect(hit).not.toHaveBeenCalled();
+    hit.mockRestore();
     expect(await checkCode(cookie, code, now)).toEqual(USERS.erin);
+  });
+
+  it('can’t be turned into a mailing list, or used to lock someone out', async () => {
+    tempRepo();
+    const hour = Math.floor(Date.now() / 3_600_000) * 3_600_000 + 60_000;
+    // Only plain addresses: nothing for a mail service to read a second recipient into.
+    for (const odd of ['Erin <erin@example.com>', 'erin@example.com, joel@example.com', '"erin"@example.com', 'erín@example.com']) {
+      await expect(sendCode(odd, hour)).rejects.toMatchObject({ status: 400 });
+    }
+    // Someone else's network asking for Erin's address doesn't use up Erin's own.
+    for (let i = 0; i < 5; i++) await sendCode('erin@example.com', hour + i, undefined, 'attacker');
+    await expect(sendCode('erin@example.com', hour + 10, undefined, 'attacker')).rejects.toMatchObject({ status: 429 });
+    await sendCode('erin@example.com', hour + 20, undefined, 'erins-phone');
+    // One network can't spray codes at everyone either: every request counts, refused or not (6 so far, 20 an hour).
+    for (let i = 0; i < 14; i++) await sendCode(`stranger${i}@example.com`, hour + 100 + i, undefined, 'attacker');
+    await expect(sendCode('stranger99@example.com', hour + 200, undefined, 'attacker')).rejects.toMatchObject({ status: 429 });
+    // And the whole site stops at its daily number, so the email service's quota is never all used up.
+    process.env.CODE_EMAILS_PER_DAY = '7';
+    const sent = emails.length;
+    for (let i = sent; i < 7; i++) await sendCode('joel@example.com', hour + 300 + i, undefined, `net${i}`);
+    await expect(sendCode('joel@example.com', hour + 400, undefined, 'another')).rejects.toMatchObject({ status: 503 });
+    expect(emails).toHaveLength(7);
+    delete process.env.CODE_EMAILS_PER_DAY;
   });
 
   it('send at most five codes an hour to one address', async () => {

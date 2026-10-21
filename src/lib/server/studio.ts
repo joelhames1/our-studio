@@ -321,6 +321,16 @@ export async function react(user: User, projectId: string, optionId: string, val
   return r;
 }
 
+/** Designs one project can hold, fronts and backs, archived or not: far past what anyone browses, short of what a script could pile up. */
+export const MAX_DESIGNS = 1000;
+
+/** Refuses more designs once a project is full. */
+async function roomFor(projectId: string, adding: number): Promise<void> {
+  if ((await getRepo().listOptions(projectId)).length + adding > MAX_DESIGNS) {
+    throw new HttpError(409, `This project has ${MAX_DESIGNS} designs already, which is as many as one holds. Start a fresh project for new ideas.`);
+  }
+}
+
 export async function addOptions(
   projectId: string,
   user: UserId | 'system',
@@ -328,6 +338,7 @@ export async function addOptions(
   designs: ShirtDesign[],
   extra: { parentId?: string | null; label?: string } = {},
 ): Promise<ShirtOption[]> {
+  await roomFor(projectId, designs.length);
   const batch = newId();
   const t = Date.now();
   // Boarding-pass designs read the trip from the project.
@@ -382,6 +393,7 @@ export async function addBackOptions(
   designs: BackDesign[],
   extra: { parentId?: string | null; label?: string } = {},
 ): Promise<BackOption[]> {
+  await roomFor(projectId, designs.length);
   const batch = newId();
   const t = Date.now();
   const options: BackOption[] = designs.map((payload, i) => ({

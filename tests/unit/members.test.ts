@@ -20,6 +20,7 @@ import type { Decision, User } from '@/lib/engine/types';
 import { closeAccount, eraseDue, eraseEmptyHousehold, eraseNow, keepData, peopleOverview, restore, switchOff } from '@/lib/server/account';
 import { activityFor } from '@/lib/server/activity';
 import { COOKIE, sessionCookie, userForSession, USERS } from '@/lib/server/auth';
+import { sendCode } from '@/lib/server/codes';
 import { RESEND } from '@/lib/server/email';
 import { GOOGLE_TOKEN } from '@/lib/server/google';
 import { acceptInvite, cancelInvite, createInvite, findInvite, INVITE_COOKIE, inviteCookie, openInvites } from '@/lib/server/invites';
@@ -511,6 +512,21 @@ describe('where you’re signed in', () => {
     expect(deviceOf('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36')).toBe('Android · Chrome');
     expect(deviceOf('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) FxiOS/130.0 Mobile/15E148')).toBe('iPhone · Firefox');
     expect(deviceOf(null)).toBe('A device · a browser');
+  });
+});
+
+describe('codes on an invite', () => {
+  it('send a few, not a mailing list', async () => {
+    const { repo } = tempRepo();
+    const { sam } = await riveras(repo);
+    const { link } = await createInvite(sam, { name: 'Leo' }, SITE);
+    const held = inviteCookie(tokenOf(link), 'Leo').value;
+    for (let i = 0; i < 5; i++) await sendCode(`leo${i}@example.com`, Date.now(), held, `net${i}`);
+    expect(emails).toHaveLength(5);
+    await expect(sendCode('leo9@example.com', Date.now(), held, 'net9')).rejects.toMatchObject({ status: 429, message: expect.stringMatching(/invite has sent all the codes/) });
+    // People already in a household aren't using the invite, so it doesn't count them.
+    await sendCode('sam@example.com', Date.now(), held, 'net10');
+    expect(emails).toHaveLength(6);
   });
 });
 

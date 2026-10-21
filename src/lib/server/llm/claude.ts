@@ -120,8 +120,11 @@ function costOf(res: Anthropic.Beta.BetaMessage, model: string): number {
  * A request that can search the web and read pages before answering. Claude
  * hands back its answer by calling `tool` (a strict schema, so the answer is
  * always well formed). `holdUsd` is held against the budget up front, since
- * search results make the real cost hard to predict; the actual tokens and
- * searches are recorded afterwards.
+ * search results make the real cost hard to predict, and the search stops
+ * before starting another turn once it has spent that much; `maxSearches` is
+ * for the whole search, not each turn. The actual tokens and searches are
+ * recorded afterwards, and a turn cut off mid-answer counts as the whole hold
+ * (it may well have been billed).
  */
 export async function research<T>(opts: {
   system: string;
@@ -139,6 +142,8 @@ export async function research<T>(opts: {
   const settle = await reserveSpend('anthropic', model, opts.holdUsd, opts.note);
   const deadline = Date.now() + opts.withinMs;
   let spent = 0;
+  let searched = 0;
+  let fetched = 0;
   let trouble: Trouble | undefined;
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: opts.content }];
   try {
@@ -146,6 +151,11 @@ export async function research<T>(opts: {
     for (let turn = 0; turn < 6; turn++) {
       const left = deadline - Date.now();
       if (left < 10_000) throw new ClaudeFailed('The search ran out of time. Try again?');
+      if (spent >= opts.holdUsd) throw new ClaudeFailed('The search was taking a lot of reading, so it stopped there. Try again?');
+      // Searches and page reads are shared across turns: once they're used up, Claude only has the answer tool left.
+      const web: Anthropic.Beta.BetaToolUnion[] = [];
+      if (searched < opts.maxSearches) web.push({ type: 'web_search_20260209', name: 'web_search', max_uses: opts.maxSearches - searched });
+      if (fetched < opts.maxSearches) web.push({ type: 'web_fetch_20260209', name: 'web_fetch', max_uses: opts.maxSearches - fetched, max_content_tokens: 12000 });
       // No automatic retries: a retried search runs (and bills) every search again.
       const res = await claude.beta.messages.create({
         model,
@@ -154,14 +164,12 @@ export async function research<T>(opts: {
         fallbacks: 'default',
         system: opts.system,
         output_config: { effort: opts.effort ?? 'medium' },
-        tools: [
-          { type: 'web_search_20260209', name: 'web_search', max_uses: opts.maxSearches },
-          { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: opts.maxSearches, max_content_tokens: 12000 },
-          { ...opts.tool, strict: true },
-        ],
+        tools: [...web, { ...opts.tool, strict: true }],
         messages,
       }, { timeout: left, maxRetries: 0 });
       spent += costOf(res, model);
+      searched += res.usage.server_tool_use?.web_search_requests ?? 0;
+      fetched += res.usage.server_tool_use?.web_fetch_requests ?? 0;
       if (res.stop_reason === 'refusal') throw new ClaudeDeclined('Claude declined that one. Try again in a moment.');
       const answer = res.content.find((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use' && b.name === opts.tool.name);
       if (answer) return answer.input as T;
@@ -173,6 +181,8 @@ export async function research<T>(opts: {
     throw new ClaudeFailed('Claude didn’t finish the search. Try again?');
   } catch (e) {
     trouble = claudeTrouble(e);
+    // Cut off mid-turn: Anthropic may have done (and billed) the work anyway, so count the hold rather than nothing.
+    if (e instanceof Anthropic.APIConnectionError) spent = Math.max(spent, opts.holdUsd);
     throw e;
   } finally {
     await settle(spent, trouble);

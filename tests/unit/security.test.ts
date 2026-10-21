@@ -19,12 +19,12 @@ import { download, falProvider } from '@/lib/server/providers/fal';
 import { MAX_SVG_CHARS, sanitizeSvg } from '@/lib/server/providers/svg';
 import { signSession, verifySession } from '@/lib/server/session';
 import { reserveSpend, spentThisMonth } from '@/lib/server/spend';
-import { ensureSeed, projectState, SEED_PROJECT_ID, updateBrief } from '@/lib/server/studio';
+import { ensureSeed, MAX_DESIGNS, projectState, remix, SEED_PROJECT_ID, updateBrief } from '@/lib/server/studio';
 import { editOption } from '@/lib/server/tweaks';
 
 const ERIN = 'e'.repeat(12) + '0123456789abcdef0123456789abcdef';
 const JOEL = 'j'.repeat(12) + 'fedcba9876543210fedcba9876543210';
-const KEYS = ['ERIN_LINK_TOKEN', 'JOEL_LINK_TOKEN', 'SESSION_VERSION', 'SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY', 'VERCEL', 'MONTHLY_BUDGET_USD', 'ANTHROPIC_API_KEY'];
+const KEYS = ['ERIN_LINK_TOKEN', 'JOEL_LINK_TOKEN', 'SESSION_VERSION', 'SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY', 'VERCEL', 'MONTHLY_BUDGET_USD', 'ANTHROPIC_API_KEY', 'COST_PER_IMAGE_USD', 'IMAGE_QUALITY'];
 const saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
 
 beforeEach(() => {
@@ -325,5 +325,29 @@ describe('artwork and print guards', () => {
     expect(dev).toContain("'unsafe-eval'");
     expect(dev).not.toContain('supabase');
     expect(contentSecurityPolicy('n', { dev: false, https: false, supabaseUrl: 'javascript:alert(1)' })).not.toContain('javascript');
+  });
+});
+
+describe('cost guards', () => {
+  it('never prices an image at nothing, and guesses from the quality when it isn’t set', () => {
+    process.env.COST_PER_IMAGE_USD = '0';
+    expect(config.costPerImageUsd).toBe(0.01);
+    delete process.env.COST_PER_IMAGE_USD;
+    expect(config.costPerImageUsd).toBe(0.06);
+    process.env.IMAGE_QUALITY = 'high';
+    expect(config.costPerImageUsd).toBe(0.25);
+    process.env.COST_PER_IMAGE_USD = '0.3';
+    expect(config.costPerImageUsd).toBe(0.3);
+  });
+
+  it('lets a project hold a thousand designs, and no more', async () => {
+    const { repo } = tempRepo();
+    await ensureSeed();
+    const existing = await repo.listOptions(SEED_PROJECT_ID);
+    const [one] = existing;
+    await repo.saveOptions(Array.from({ length: MAX_DESIGNS - existing.length - 3 }, (_, i) => ({ ...one, id: `fill${i}` })));
+    await expect(remix(USERS.joel, SEED_PROJECT_ID, null, 6)).rejects.toMatchObject({ status: 409 });
+    expect(await remix(USERS.joel, SEED_PROJECT_ID, null, 3)).toHaveLength(3);
+    expect((await repo.listOptions(SEED_PROJECT_ID)).length).toBe(MAX_DESIGNS);
   });
 });

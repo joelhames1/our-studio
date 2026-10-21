@@ -6,9 +6,12 @@
 // The server keeps no codes. The browser that asked holds a short-lived cookie
 // with the address, when it runs out, and a signature over those and the code,
 // so only that browser, with the code from the email, can finish. The database
-// only counts: codes sent to each address (5 an hour, 10 a day) and wrong tries
-// at each code (5), which keeps six digits out of reach of guessing. If those
-// counters can't be reached, codes stop rather than go uncounted.
+// only counts, so the form can't be turned into a way to spam people or lock
+// them out: codes to each address from each network (5 an hour, 10 a day), to
+// each address from anywhere (30 a day), from each network (20 an hour, 60 a
+// day), on each invite (5), and across the whole site (CODE_EMAILS_PER_DAY, 100
+// by default); and wrong tries at each code (5). If those counters can't be
+// reached, codes stop rather than go uncounted.
 //
 // Every address gets the same answer, "if it's on the list, a code is on its
 // way", so the form can't be used to find out who's invited.
@@ -16,7 +19,7 @@ import 'server-only';
 import { createHash, createHmac, randomBytes, randomInt } from 'node:crypto';
 import type { User } from '@/lib/engine/types';
 import { HttpError, userForEmail } from './auth';
-import { holdsInvite, joinOnSignIn } from './invites';
+import { heldInvite, joinOnSignIn } from './invites';
 import { config } from './config';
 import { cookieName } from './cookies';
 import { sendEmail } from './email';
@@ -27,14 +30,31 @@ import { sameSecret } from './session';
 export const CODE_COOKIE = cookieName('studio_code');
 export const CODE_MINUTES = 10;
 export const MAX_TRIES = 5;
-/** [window in seconds, most codes in it], per address. */
-const SENDS: [number, number][] = [
+/** [window in seconds, most codes in it]: to one address from one network, from one network, to one address from anywhere. */
+const PER_ADDRESS_AND_NETWORK: [number, number][] = [
   [3600, 5],
   [24 * 3600, 10],
 ];
+const PER_NETWORK: [number, number][] = [
+  [3600, 20],
+  [24 * 3600, 60],
+];
+const PER_ADDRESS: [number, number][] = [[24 * 3600, 30]];
+/** Codes one invite can send, to whatever addresses, while it lasts. */
+const PER_INVITE = 5;
 
 const sha = (s: string) => createHash('sha256').update(s).digest();
-const looksLikeEmail = (v: string) => v.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+/** A plain address and nothing else: no names, angle brackets, commas or quotes for a mail service to read more into. */
+const looksLikeEmail = (v: string) => v.length <= 254 && /^[a-z0-9._%+'-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(v);
+
+/** Counts one in every window of a limit, and says how long to wait if any is full. */
+async function within(prefix: string, windows: [number, number][], now: number, message: (wait: string) => string): Promise<void> {
+  for (const [seconds, max] of windows) {
+    const start = Math.floor(now / 1000 / seconds) * seconds;
+    const ends = (start + seconds) * 1000;
+    if ((await count(`${prefix}|${seconds}|${start}`, ends)) > max) throw new HttpError(429, message(howLong((ends - now) / 1000)));
+  }
+}
 
 /** The signature that ties a code to one address, one browser and one expiry. */
 function sign(nonce: string, email: string, exp: number, code: string): string {
@@ -77,23 +97,31 @@ function codeEmail(code: string) {
  * nobody will ever see, after about as long as an email takes, so the two
  * look the same from outside.
  */
-export async function sendCode(address: unknown, now = Date.now(), invite?: unknown): Promise<{ cookie: string; to: string }> {
+export async function sendCode(address: unknown, now = Date.now(), invite?: unknown, network = 'local'): Promise<{ cookie: string; to: string }> {
   if (!config.emailCodes) throw new HttpError(404, 'Email codes aren’t set up.');
   const email = typeof address === 'string' ? address.trim().toLowerCase() : '';
   if (!looksLikeEmail(email)) throw new HttpError(400, 'That doesn’t look like an email address.');
 
-  // Count against the address, whoever it belongs to.
+  // Counted whoever the address belongs to: per network first, so one network can't use up someone else's allowance.
   const tag = sha(email).toString('hex').slice(0, 32);
-  for (const [seconds, max] of SENDS) {
-    const start = Math.floor(now / 1000 / seconds) * seconds;
-    const ends = (start + seconds) * 1000;
-    if ((await count(`code-send|${tag}|${seconds}|${start}`, ends)) > max) {
-      throw new HttpError(429, `That’s a lot of codes for one address. Try again in about ${howLong((ends - now) / 1000)}.`);
+  const busy = (wait: string) => `That’s a lot of codes. Try again in about ${wait}.`;
+  await within(`code-net|${network}`, PER_NETWORK, now, busy);
+  await within(`code-send|${tag}|${network}`, PER_ADDRESS_AND_NETWORK, now, (wait) => `That’s a lot of codes for one address. Try again in about ${wait}.`);
+  await within(`code-addr|${tag}`, PER_ADDRESS, now, (wait) => `That’s a lot of codes for one address. Try again in about ${wait}.`);
+
+  // Someone holding an invite can get a code at an address we don't know yet: that's how they arrive. A few per invite, not a mailing list.
+  const known = await userForEmail(email);
+  const held = known ? null : await heldInvite(invite);
+  if (held && (await count(`code-invite|${held.id}`, Date.parse(held.expiresAt))) > PER_INVITE) {
+    throw new HttpError(429, 'That invite has sent all the codes it can. Ask whoever sent it for a new one.');
+  }
+  const who = known ?? held;
+  if (who) {
+    const day = Math.floor(now / 86_400_000);
+    if ((await count(`code-all|${day}`, (day + 1) * 86_400_000)) > config.codeEmailsPerDay) {
+      throw new HttpError(503, 'Email codes are resting until tomorrow. Use Google, or try again later.');
     }
   }
-
-  // Someone holding an invite can get a code at an address we don't know yet: that's how they arrive.
-  const who = (await userForEmail(email)) ?? (await holdsInvite(invite));
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   const nonce = randomBytes(16).toString('base64url');
   const exp = Math.floor(now / 1000) + CODE_MINUTES * 60;
@@ -121,6 +149,8 @@ export async function checkCode(cookie: unknown, typed: unknown, now = Date.now(
   }
   const exp = Number(expS);
   if (exp * 1000 <= now) throw new HttpError(410, `That code has run out (they last ${CODE_MINUTES} minutes). Ask for a new one.`);
+  // No code lasts longer than this; a later time is made up, and isn't worth counting tries for.
+  if (exp * 1000 > now + (CODE_MINUTES + 1) * 60_000) throw new HttpError(400, 'This browser doesn’t have a code waiting. Ask for a new one.');
   const code = typeof typed === 'string' ? typed.replace(/\s/g, '') : '';
   if (!/^\d{6}$/.test(code)) throw new HttpError(400, 'The code is the six digits in the email.');
 

@@ -462,6 +462,21 @@ describe('finding printers', () => {
     expect((await repo.listPrinters('first'))[0]).toMatchObject({ status: 'saved', searches: { '90210': '2026-10-17T00:00:00.000Z' } });
   });
 
+  it('stops once a search has spent what it held, and shares its searches and page reads across turns', async () => {
+    tempRepo();
+    requests.length = 0;
+    // Each turn here costs $0.08 (10,000 tokens in, 1,000 out, two searches): a $0.10 hold covers one and a bit.
+    script = [reply([{ type: 'text', text: 'Looking…' }], 'pause_turn'), reply([{ type: 'text', text: 'Still looking…' }], 'pause_turn'), reply([{ type: 'text', text: 'And more…' }], 'pause_turn')];
+    const tool = { name: 't', description: 'd', input_schema: { type: 'object' as const } };
+    const err = await research({ system: 's', content: 'c', note: 'test', tool, maxSearches: 3, holdUsd: 0.1, withinMs: 60_000 }).catch((e) => e);
+    expect(claudeProblem(err)).toMatch(/a lot of reading/);
+    expect(requests).toHaveLength(2);
+    const tools = (n: number) => (requests[n].body.tools as { name: string; max_uses?: number }[]).map((t) => `${t.name}:${t.max_uses ?? '-'}`);
+    expect(tools(0)).toEqual(['web_search:3', 'web_fetch:3', 't:-']);
+    expect(tools(1)).toEqual(['web_search:1', 'web_fetch:2', 't:-']);
+    script = [];
+  });
+
   it('stops before the server’s own time limit', async () => {
     tempRepo();
     requests.length = 0;

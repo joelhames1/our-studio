@@ -15,7 +15,7 @@ import { addOptions, contextOf, getShirtProject, occasionsOf, type ShirtOption }
 export type TweakInterpreter = (
   base: ShirtDesign,
   request: string,
-  context: { copy: ShirtDesign['copyOverride']; projectId?: string; about: string; shirt?: GarmentColor },
+  context: { copy: ShirtDesign['copyOverride']; projectId?: string; about: string; shirt?: GarmentColor; user?: User },
 ) => Promise<TweakResult | null>;
 
 let smart: TweakInterpreter | null = null;
@@ -24,18 +24,18 @@ export function setTweakInterpreter(fn: TweakInterpreter | null) {
 }
 
 /** `shirt`: the shirt color they're looking at, so "darker" means darker on that. */
-export async function tweakOption(user: User, projectId: string, optionId: string, request: string, shirt?: unknown) {
-  const text = request.trim().slice(0, 400);
+export async function tweakOption(user: User, projectId: string, optionId: unknown, request: unknown, shirt?: unknown) {
+  const text = typeof request === 'string' ? request.trim().slice(0, 400) : '';
   if (!text) throw new HttpError(400, 'Tell me what to change.');
   const project = await getShirtProject(projectId);
-  const option = (await getRepo().getOption(optionId)) as ShirtOption | null;
+  const option = typeof optionId === 'string' ? ((await getRepo().getOption(optionId)) as ShirtOption | null) : null;
   if (!option || option.projectId !== projectId || option.kind !== 'shirt') throw new HttpError(404, 'That design is gone.');
 
   const copy = option.payload.copyOverride ?? project.brief.copy;
   let result: TweakResult | null = null;
   if (smart) {
     try {
-      result = await smart(option.payload, text, { copy, projectId, about: contextOf(project), shirt: typeof shirt === 'string' ? garmentColor(shirt) : undefined });
+      result = await smart(option.payload, text, { copy, projectId, about: contextOf(project), shirt: typeof shirt === 'string' ? garmentColor(shirt) : undefined, user });
     } catch (e) {
       // Our own errors are worth showing, except an empty budget: keywords still work then.
       if (e instanceof HttpError && e.status !== 402) throw e;
@@ -47,7 +47,7 @@ export async function tweakOption(user: User, projectId: string, optionId: strin
   if (!result.changes.length) {
     throw new HttpError(422, `I didn’t quite catch that. Try “bigger words”, “coral big words”, “${addArtRequest(occasions).toLowerCase()}” or “simpler”.`);
   }
-  const [created] = await addOptions(projectId, user.id, 'tweak', [result.design], { parentId: optionId, label: text.slice(0, 80) });
+  const [created] = await addOptions(projectId, user.id, 'tweak', [result.design], { parentId: option.id, label: text.slice(0, 80) });
   return { option: created, summary: result.changes.join(', ') };
 }
 

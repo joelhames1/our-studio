@@ -84,6 +84,11 @@ export const config = {
    * to sign with. Codes go to the addresses in the directory of people, the
    * same ones Google sign-in matches.
    */
+  /** Most sign-in code emails the whole site sends in a day, so nobody can use up the email service's quota (and with it, everyone's codes and alerts). */
+  get codeEmailsPerDay() {
+    const n = Number(env('CODE_EMAILS_PER_DAY'));
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 100;
+  },
   get emailCodes() {
     return !!(this.resendKey && this.serverSecret);
   },
@@ -140,10 +145,15 @@ export const config = {
   get openaiImageModel() {
     return env('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1.5';
   },
-  /** Rough cost of one draft image, for the spend guard. */
+  /**
+   * Rough cost of one draft image, for the spend guard: COST_PER_IMAGE_USD, or
+   * a guess from IMAGE_QUALITY (high costs about four times medium). Never
+   * under a cent, so a zero can't switch the image budget off.
+   */
   get costPerImageUsd() {
-    const n = Number(env('COST_PER_IMAGE_USD') ?? 0.06);
-    return Number.isFinite(n) && n >= 0 ? n : 0.06;
+    const guess = { low: 0.02, medium: 0.06, high: 0.25 }[this.imageQuality];
+    const n = Number(env('COST_PER_IMAGE_USD') ?? guess);
+    return Number.isFinite(n) ? Math.max(0.01, n) : guess;
   },
   /** Image quality for drafts: low | medium | high. */
   get imageQuality(): 'low' | 'medium' | 'high' {

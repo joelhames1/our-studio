@@ -74,6 +74,9 @@ export async function download(url: string): Promise<Buffer> {
 }
 
 const asDataUri = (png: Buffer) => `data:image/png;base64,${png.toString('base64')}`;
+/** A second, smaller job: models other than gpt-image paint on a background that then has to be taken off. */
+const BACKGROUND_REMOVAL_USD = 0.01;
+const costOf = () => config.costPerImageUsd + (config.falImageModel.includes('gpt-image') ? 0 : BACKGROUND_REMOVAL_USD);
 
 export const falProvider: ImageProvider = {
   id: 'fal',
@@ -82,7 +85,7 @@ export const falProvider: ImageProvider = {
     return config.falImageModel;
   },
   get estimateUsd() {
-    return config.costPerImageUsd;
+    return costOf();
   },
 
   async generate(req: ArtRequest): Promise<ArtResult> {
@@ -96,7 +99,7 @@ export const falProvider: ImageProvider = {
     if (!first?.url) throw new Error('fal.ai returned no image.');
     let png: Buffer = await sharp(await download(first.url)).png().toBuffer();
     if (!isGptImage) png = await this.removeBackground!(png);
-    return { data: png, type: 'png', usd: config.costPerImageUsd };
+    return { data: png, type: 'png', usd: costOf() };
   },
 
   /** 4x ESRGAN on the colors; the transparency mask is resampled and re-attached. */

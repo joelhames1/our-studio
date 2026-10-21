@@ -4,12 +4,13 @@
 // from hammering the AI services. Counts live in the database, so they hold
 // across every server instance.
 import 'server-only';
+import { createHash } from 'node:crypto';
 import type { User } from '@/lib/engine/types';
 import { record } from './activity';
 import { HttpError } from './auth';
 import { getRepo } from './repo';
 
-export type LimitKind = 'claude' | 'art' | 'search' | 'build' | 'create' | 'invite';
+export type LimitKind = 'claude' | 'art' | 'search' | 'build' | 'create' | 'invite' | 'free';
 
 /** [window in seconds, most requests in it]. Generous for people, tight for scripts. */
 export const LIMITS: Record<LimitKind, { what: string; windows: [number, number][] }> = {
@@ -19,6 +20,8 @@ export const LIMITS: Record<LimitKind, { what: string; windows: [number, number]
   build: { what: 'print-file builds', windows: [[10 * 60, 10], [24 * 3600, 30]] },
   create: { what: 'new projects', windows: [[3600, 10], [24 * 3600, 30]] },
   invite: { what: 'invites', windows: [[3600, 10], [24 * 3600, 30]] },
+  // Free things that still add to what's stored: remixes, edits, renames. Far more than anyone clicks; a script hits it fast.
+  free: { what: 'changes', windows: [[10 * 60, 120], [24 * 3600, 1500]] },
 };
 
 /** "10 minutes", "hour", "day": how long a window is. */
@@ -62,4 +65,14 @@ export async function rateLimit(user: User, kind: LimitKind, now = Date.now()): 
   // Log the first refusal in a window, not every retry after it.
   if (over.n === over.max + 1) await record(user, 'limited', { detail: `${rule.what}: ${over.max} per ${span(over.seconds)}` });
   throw new HttpError(429, `That’s a lot of ${rule.what} in a short while. Try again in about ${howLong(over.left)}.`);
+}
+
+/**
+ * Which network a request came from, as a short hash (the address itself
+ * isn't kept), for limits on things anyone can ask for without signing in.
+ * Vercel sets these headers itself, so a browser can't pick its own.
+ */
+export function networkOf(req: Request): string {
+  const ip = req.headers.get('x-real-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
+  return createHash('sha256').update(`network|${ip}`).digest('hex').slice(0, 24);
 }
