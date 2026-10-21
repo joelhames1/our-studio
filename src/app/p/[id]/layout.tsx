@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
-import { getUser } from '@/lib/server/auth';
-import { SetupNeeded } from '@/lib/server/repo';
+import { getUser, HttpError } from '@/lib/server/auth';
+import { DatabaseUnreachable, SetupNeeded } from '@/lib/server/repo';
 import { ensureSeed, projectState } from '@/lib/server/studio';
 import { ProjectProvider } from '@/components/ProjectProvider';
 import { ProjectHeader } from '@/components/ProjectHeader';
@@ -18,8 +18,10 @@ export default async function ProjectLayout({ children, params }: { children: Re
     await ensureSeed();
     state = await projectState(id, user);
   } catch (e) {
-    if (e instanceof SetupNeeded) redirect('/');
-    redirect('/');
+    // Not there (or not theirs), or the database is down or not set up: home says which. Anything else is a real
+    // problem, for the error screen and an alert, not a quiet trip home.
+    if (e instanceof HttpError || e instanceof SetupNeeded || e instanceof DatabaseUnreachable) redirect('/');
+    throw e;
   }
   return (
     <ProjectProvider initial={state}>

@@ -136,7 +136,8 @@ export const falProvider: ImageProvider = {
   /** 4x ESRGAN on the colors; the transparency mask is resampled and re-attached. */
   async upscale(png: Buffer): Promise<Buffer> {
     const meta = await sharp(png).metadata();
-    const out = await falRun<{ image: FalImage }>(config.falUpscaleModel, { image_url: asDataUri(png), scale: 4, output_format: 'png' });
+    // A minute at most: the print build falls back to resampling, and has its own clock to keep to.
+    const out = await falRun<{ image: FalImage }>(config.falUpscaleModel, { image_url: asDataUri(png), scale: 4, output_format: 'png' }, 60_000);
     const big = await download(out.image.url);
     const bigMeta = await sharp(big).metadata();
     if (bigMeta.hasAlpha || !meta.hasAlpha) return sharp(big).png().toBuffer();

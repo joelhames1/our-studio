@@ -2,6 +2,8 @@
 // back to simpler versions when it fails, which hides a broken setup; this
 // reads the outcome of recent calls from the spend log so Setup can say so.
 import type { SpendEntry } from '@/lib/engine/types';
+import { backupIsStale, lastBackup } from './backup';
+import { config } from './config';
 import { getRepo } from './repo';
 import type { Trouble } from './spend';
 
@@ -69,4 +71,23 @@ export async function aiTrouble(): Promise<ServiceTrouble[]> {
     found.push({ provider, label, effect, at: latest.at, note: latest.note, message: latest.trouble.message });
   }
   return found;
+}
+
+/**
+ * The nightly backup, if it has stopped: scheduled (CRON_SECRET set) but the
+ * last copy is more than a day and a half old. A schedule that never runs
+ * never gets far enough to send an alert, so this is how anyone finds out.
+ */
+export async function backupTrouble(now = Date.now()): Promise<ServiceTrouble | null> {
+  if (!config.cronSecret) return null;
+  const last = await lastBackup();
+  if (!last || !backupIsStale(last, now)) return null;
+  return {
+    provider: 'backup',
+    label: 'The nightly backup',
+    effect: 'Check Vercel → the project → Settings → Cron Jobs, then Setup → Back up now.',
+    at: last.at,
+    note: 'nightly backup',
+    message: `The last copy of the database was saved ${ago(last.at, now)}.`,
+  };
 }

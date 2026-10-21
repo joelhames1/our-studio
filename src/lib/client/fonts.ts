@@ -2,23 +2,41 @@
 import { useSyncExternalStore } from 'react';
 import { parse } from 'opentype.js';
 import fontList from '@/lib/design/fonts.json';
+import versions from '@/lib/design/font-versions.json';
 import type { FontSet } from '@/lib/design/types';
 
 let loaded: FontSet | null = null;
 let loading: Promise<FontSet> | null = null;
 const waiting = new Set<() => void>();
 
-/** Fetches and parses every shirt font once (about 600 KB, cached by the browser). */
+/** Each font's address carries a hash of the file, so the browser keeps it for a year (next.config.ts) and still notices a new one. */
+const fontUrl = (id: string) => `/fonts/${id}.woff?v=${(versions as Record<string, string>)[id] ?? '0'}`;
+
+/** The font files themselves, each asked for once. */
+const files = new Map<string, Promise<ArrayBuffer>>();
+function file(id: string): Promise<ArrayBuffer> {
+  let got = files.get(id);
+  if (!got) {
+    got = fetch(fontUrl(id)).then((res) => {
+      if (!res.ok) throw new Error(`Font ${id} failed to load`);
+      return res.arrayBuffer();
+    });
+    // A failed or canceled download is asked for again next time.
+    got.catch(() => files.delete(id));
+    files.set(id, got);
+  }
+  return got;
+}
+
+// Start downloading as soon as this code arrives, not when the first preview mounts: about 200 ms sooner on a
+// phone. Reading them (the slow part on a phone's CPU) still waits until a preview needs them.
+if (typeof window !== 'undefined') for (const f of fontList) file(f.id).catch(() => undefined);
+
+/** Fetches and parses every shirt font once (about 460 KB, cached by the browser). */
 export function loadFonts(): Promise<FontSet> {
   if (loaded) return Promise.resolve(loaded);
   if (!loading) {
-    loading = Promise.all(
-      fontList.map(async (f) => {
-        const res = await fetch(`/fonts/${f.id}.woff`);
-        if (!res.ok) throw new Error(`Font ${f.id} failed to load`);
-        return [f.id, parse(await res.arrayBuffer())] as const;
-      }),
-    ).then((pairs) => {
+    loading = Promise.all(fontList.map(async (f) => [f.id, parse(await file(f.id))] as const)).then((pairs) => {
       loaded = Object.fromEntries(pairs);
       waiting.forEach((done) => done());
       return loaded;

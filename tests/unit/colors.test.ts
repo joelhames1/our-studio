@@ -3,7 +3,7 @@
 // (from a stand-in for the Claude API) is held to the same rules.
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { tempRepo } from './helpers';
 import { colorChanges, hardToRead, inksIn, parseColors, partFromProbe, partsShown, PROBE_COLORS, resolveColor, safeColors, SWATCHES, wordInks } from '@/lib/design/colors';
 import { LAYOUTS } from '@/lib/design/layouts';
@@ -18,6 +18,7 @@ import { loadAllFonts } from '@/lib/server/fonts';
 import { ensureSeed, projectState, SEED_PROJECT_ID } from '@/lib/server/studio';
 import { editOption, tweakOption } from '@/lib/server/tweaks';
 import '@/lib/server/ai';
+import { ask, ClaudeFailed, z } from '@/lib/server/llm/claude';
 import { suggestCopy, writeArtConcepts } from '@/lib/server/llm/tasks';
 
 let fonts: FontSet;
@@ -214,13 +215,17 @@ describe('the Colors panel and Change something on the server', () => {
 // A stand-in for the Claude API.
 let answer: object = {};
 let sent: { system: string; messages: { content: string }[] }[] = [];
+/** How long it takes to answer, for a slow day. */
+let delay = 0;
 let server: http.Server;
 beforeAll(async () => {
   server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => (raw += c));
-    req.on('end', () => {
+    req.on('end', async () => {
       sent.push(JSON.parse(raw));
+      if (delay) await new Promise((r) => setTimeout(r, delay));
+      if (res.destroyed) return;
       res.setHeader('Content-Type', 'application/json');
       res.end(
         JSON.stringify({
@@ -285,6 +290,35 @@ describe('Change something, with Claude', () => {
     expect(req.messages[0].content).toMatch(/tagline #1F2A44 \(Navy, picked for this design\)/);
   });
 
+  it('keeps the rest of a tweak when its new artwork can’t be painted', async () => {
+    tempRepo();
+    await ensureSeed();
+    const seed = (await projectState(SEED_PROJECT_ID, USERS.erin)).options.find((o) => o.source === 'seed')!;
+    const keep = { provider: process.env.IMAGE_PROVIDER, key: process.env.FAL_KEY };
+    process.env.IMAGE_PROVIDER = 'fal';
+    process.env.FAL_KEY = 'fal-test-not-real';
+    // fal is down; Claude (the stand-in) is fine.
+    const realFetch = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.startsWith('https://fal.run/')) return new Response('{"detail":"Service is down"}', { status: 503 });
+      return realFetch(input, init);
+    });
+    try {
+      answer = { ...nothing, changes: ['coral big words'], colors: { ...noColors, headline: 'coral' }, newArtwork: 'a golden retriever' };
+      const { option, summary } = await tweakOption(USERS.erin, SEED_PROJECT_ID, seed.id, 'make the big words coral and add a golden retriever');
+      expect(option.payload.colors).toEqual({ headline: hex('Coral') });
+      expect(option.payload.art).toEqual(seed.payload.art);
+      expect(summary).toMatch(/couldn’t paint new artwork just now$/);
+    } finally {
+      vi.restoreAllMocks();
+      for (const [k, v] of [['IMAGE_PROVIDER', keep.provider], ['FAL_KEY', keep.key]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
   it('ignores a color it can’t print', async () => {
     tempRepo();
     await ensureSeed();
@@ -326,5 +360,25 @@ describe('What Claude is told about a project', () => {
     answer = { ideas: [{ headline: 'A', tagline: 'B', extra: '' }] };
     await suggestCopy(SEED_COPY, '', 'A quiet anniversary in Maine.');
     expect(sent[0].system).toBe(again);
+  });
+});
+
+describe('a slow Claude', () => {
+  it('is given up on at the deadline, and charged for the time it had, not the worst case', async () => {
+    const { repo } = tempRepo();
+    delay = 1500;
+    const started = Date.now();
+    try {
+      const err = await ask(z.object({ reply: z.string() }), { system: 'Say hi.', content: 'hi', note: 'slow test', deadlineMs: 300 }).catch((e) => e);
+      expect(err).toBeInstanceOf(ClaudeFailed);
+      expect(err.message).toMatch(/took too long/);
+      expect(Date.now() - started).toBeLessThan(1400);
+    } finally {
+      delay = 0;
+    }
+    const [entry] = (await repo.listSpendSince('2000-01-01')).filter((r) => r.note === 'slow test');
+    expect(entry.trouble).toMatchObject({ transient: true });
+    // The hold was about 32 cents (16,000 tokens of answer); 0.3 s of writing is well under one.
+    expect(entry.usd).toBeLessThan(0.01);
   });
 });

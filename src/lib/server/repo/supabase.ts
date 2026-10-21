@@ -6,7 +6,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { ActivityAction, ActivityEntry, Decision, Household, HouseholdId, Invite, Membership, OptionRecord, Person, Project, Reaction, SessionRecord, SpendEntry, UserId } from '@/lib/engine/types';
 import { FIRST_HOUSEHOLD } from '@/lib/engine/types';
 import type { Printer } from '@/lib/kinds/printers';
-import { SetupNeeded, type DirectoryData, type Repo, type StoredAsset } from './types';
+import { DatabaseUnreachable, SetupNeeded, type DirectoryData, type Repo, type StoredAsset } from './types';
 
 const BUCKET = 'studio';
 
@@ -82,6 +82,28 @@ export function supabaseConfigProblem(url: string, key: string): string | null {
 
 type SupabaseError = { message?: string; code?: string; details?: string | null; status?: number } | null;
 
+/** Network failures, calls that ran out of time, and the gateway pages a struggling or paused project answers with. */
+const UNREACHABLE =
+  /fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|getaddrinfo|ETIMEDOUT|TimeoutError|AbortError|aborted due to timeout|operation was aborted|<html|bad gateway|service unavailable|gateway time-?out/i;
+
+/**
+ * How long one call to Supabase may take before it counts as unreachable, so
+ * a hung database fails in seconds (and the app says so) instead of holding
+ * every request until Vercel gives up at 300. Files get longer.
+ */
+export const DEADLINES = { data: 8_000, files: 60_000 };
+
+/** Storage's "no such file": a 404, or the 400 with statusCode "404" it has long answered with. */
+const missingFile = (e: { message?: string; status?: number; statusCode?: string }) => e.status === 404 || e.statusCode === '404' || /not.?found/i.test(e.message ?? '');
+
+function withDeadlines(deadlines: typeof DEADLINES): typeof fetch {
+  return (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const deadline = AbortSignal.timeout(url.includes('/storage/v1/') ? deadlines.files : deadlines.data);
+    return fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline });
+  };
+}
+
 /** Turns the Supabase errors that mean "setup isn't finished" into advice; anything else stays an error. */
 export function explainSupabaseError(what: string, error: SupabaseError, host: string): Error {
   const text = `${error?.message ?? ''} ${error?.details ?? ''}`;
@@ -97,8 +119,10 @@ export function explainSupabaseError(what: string, error: SupabaseError, host: s
       'Supabase refused access to the tables. Either the key is the publishable/anon one instead of the secret one, or the tables were never granted to the server: run supabase/migrations/0003_server_access.sql in the SQL Editor.',
     );
   }
-  if (/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|getaddrinfo|ETIMEDOUT/i.test(text)) {
-    return new SetupNeeded(`Couldn’t reach Supabase at ${host}. Check SUPABASE_URL is the Project URL (https://<your-project>.supabase.co) and that the project isn’t paused.`);
+  if (UNREACHABLE.test(text) || (error?.status ?? 0) >= 500) {
+    return new DatabaseUnreachable(
+      `Couldn’t reach Supabase at ${host} (${(error?.message ?? 'no answer').slice(0, 120)}). If it keeps happening, check the project isn’t paused (Supabase dashboard → Restore) and that SUPABASE_URL is the Project URL (https://<your-project>.supabase.co).`,
+    );
   }
   return new Error(`Supabase ${what} failed: ${error?.message ?? 'unknown error'}${code ? ` (${code})` : ''}`);
 }
@@ -112,11 +136,16 @@ export class SupabaseRepo implements Repo {
   private host: string;
   private bucketReady: Promise<void> | null = null;
 
-  constructor(url: string, serviceKey: string) {
+  constructor(url: string, serviceKey: string, deadlines = DEADLINES) {
     // Just the origin: a pasted ".../rest/v1/" or trailing slash would break every request.
     const origin = new URL(url).origin;
     this.host = new URL(url).host;
-    this.sb = createClient(origin, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    this.sb = createClient(origin, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      // No quiet retries: each would get its own deadline, and three of them is most of a minute.
+      db: { retry: false },
+      global: { fetch: withDeadlines(deadlines) },
+    });
   }
 
   private fail(what: string, error: SupabaseError): never {
@@ -489,7 +518,9 @@ export class SupabaseRepo implements Repo {
   async getAsset(key: string): Promise<StoredAsset | null> {
     await this.ensureBucket();
     const { data, error } = await this.sb.storage.from(BUCKET).download(key);
-    if (error || !data) return null;
+    // Only a file that isn't there is "not found"; anything else is trouble reaching storage, and says so.
+    if (error && !missingFile(error)) this.fail('read a file', error);
+    if (!data) return null;
     return { data: Buffer.from(await data.arrayBuffer()), contentType: data.type || 'application/octet-stream' };
   }
   async deleteAssets(keys: string[]) {

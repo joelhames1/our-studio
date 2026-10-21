@@ -15,7 +15,7 @@ import { forgetDirectory, getHousehold, setHouseholdBudget, userById } from '@/l
 import { createProject } from '@/lib/server/projects';
 import type { LocalRepo } from '@/lib/server/repo/local';
 import { setupStatus } from '@/lib/server/setup';
-import { DEFAULT_HOUSEHOLD_BUDGET_USD, householdBudget, reserveSpend, spentByHousehold, spentThisMonth } from '@/lib/server/spend';
+import { DEFAULT_HOUSEHOLD_BUDGET_USD, householdBudget, reserveSpend, settleCutOff, spentByHousehold, spentThisMonth } from '@/lib/server/spend';
 
 const jar = vi.hoisted(() => ({ value: '' }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: (name: string) => (name === 'studio_session' && jar.value ? { value: jar.value } : undefined) }) }));
@@ -127,6 +127,28 @@ describe('a household’s own limit', () => {
     // A limit of nothing means no paid AI at all.
     await setHouseholdBudget(joel, 'first', 0);
     await refusal(spend('first', 0.01));
+  });
+});
+
+describe('requests that were cut off', () => {
+  it('stop counting at the worst-case price overnight', async () => {
+    const { repo } = tempRepo();
+    const now = Date.now();
+    const ago = (min: number) => new Date(now - min * 60_000).toISOString();
+    const hold = (id: string, provider: string, usd: number, note: string, at: string) => repo.addSpend({ id, at, provider, model: 'm', usd, note, householdId: 'first' });
+    await hold('claude', 'anthropic', 0.32, 'word ideas (in progress)', ago(20));
+    await hold('paint', 'fal', 0.06, 'artwork: a dog (in progress)', ago(20));
+    await hold('running', 'anthropic', 0.32, 'design tweak (in progress)', ago(1));
+    await hold('done', 'anthropic', 0.02, 'design tweak', ago(30));
+    expect(await settleCutOff(now)).toBe(2);
+    const byId = new Map((await repo.listSpendSince('2000-01-01')).map((r) => [r.id, r]));
+    // A Claude call cut short is counted at a quarter of its hold; a painting may well have been billed, so it keeps its.
+    expect(byId.get('claude')).toMatchObject({ usd: 0.08, note: 'word ideas (cut off)', trouble: { transient: true } });
+    expect(byId.get('paint')).toMatchObject({ usd: 0.06, note: 'artwork: a dog (cut off)' });
+    // One that may still be running, and one that settled, are left alone.
+    expect(byId.get('running')).toMatchObject({ usd: 0.32, note: 'design tweak (in progress)' });
+    expect(byId.get('done')!.trouble).toBeUndefined();
+    expect(await settleCutOff(now)).toBe(0);
   });
 });
 

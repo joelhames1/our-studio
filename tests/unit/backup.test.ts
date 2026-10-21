@@ -10,9 +10,10 @@ import { sendAlert, sendTestAlert } from '@/lib/server/alerts';
 import { api } from '@/lib/server/api';
 import { USERS } from '@/lib/server/auth';
 import { backUp, lastBackup, restore, type BackupFile } from '@/lib/server/backup';
+import { backupTrouble } from '@/lib/server/health';
 import { rateLimit } from '@/lib/server/limits';
 import { createProject } from '@/lib/server/projects';
-import { getRepo, SetupNeeded } from '@/lib/server/repo';
+import { DatabaseUnreachable, getRepo, SetupNeeded } from '@/lib/server/repo';
 
 const ENV = ['RESEND_API_KEY', 'ALERT_EMAIL', 'ALERT_FROM', 'CONTACT_EMAIL', 'CRON_SECRET'];
 const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
@@ -93,6 +94,17 @@ describe('nightly backup', () => {
     await backUp(new Date('2026-11-30T10:17:00Z'));
     expect(await there('backups/day-31.json')).toBe(false);
     expect((await lastBackup())?.at).toBe('2026-11-30T10:17:00.000Z');
+  });
+
+  it('warns when the schedule has stopped, since a run that never starts can’t send an alert', async () => {
+    tempRepo();
+    const now = Date.now();
+    await backUp(new Date(now - 30 * HOUR));
+    // Off until scheduled: Setup says so already.
+    expect(await backupTrouble(now)).toBeNull();
+    process.env.CRON_SECRET = SECRET;
+    expect(await backupTrouble(now)).toBeNull();
+    expect(await backupTrouble(now + 10 * HOUR)).toMatchObject({ label: 'The nightly backup', message: 'The last copy of the database was saved 2 days ago.' });
   });
 
   it('only starts for Vercel’s schedule, and emails when it fails', async () => {
@@ -193,9 +205,15 @@ describe('alert emails', () => {
       })(new Request('https://studio.example.com/api/projects/abc/words', { method: 'POST', headers: { 'sec-fetch-site': 'same-origin' } }), { params: Promise.resolve({}) });
     const said = async (res: Response) => ((await res.json()) as { error: string }).error;
 
-    const noDb = await failing(new SetupNeeded('Couldn’t reach Supabase at abcdefgh.supabase.co. Check SUPABASE_URL.'));
-    expect(noDb.status).toBe(503);
-    expect(await said(noDb)).toBe('A couple of things are still being set up. Try again soon.');
+    const notSetUp = await failing(new SetupNeeded('Supabase is connected, but the tables aren’t there yet.'));
+    expect(notSetUp.status).toBe(503);
+    expect(await said(notSetUp)).toBe('A couple of things are still being set up. Try again soon.');
+    expect(emails.at(-1)!.text).toContain('the tables aren’t there yet');
+
+    const down = await failing(new DatabaseUnreachable('Couldn’t reach Supabase at abcdefgh.supabase.co (TimeoutError). Check the project isn’t paused.'));
+    expect(down.status).toBe(503);
+    expect(await said(down)).toBe('Can’t reach the database right now. Try again in a minute.');
+    expect(emails.at(-1)!.subject).toBe('Our Studio: something broke on the server');
     expect(emails.at(-1)!.text).toContain('abcdefgh.supabase.co');
 
     const badKey = await failing(Anthropic.APIError.generate(401, { error: { type: 'authentication_error', message: 'invalid x-api-key' } }, 'invalid x-api-key', new Headers()));
@@ -205,6 +223,16 @@ describe('alert emails', () => {
     expect(await said(theirEnd)).toBe('Claude had a problem on its end. Try again in a moment.');
     const busy = await failing(Anthropic.APIError.generate(429, { error: { type: 'rate_limit_error', message: 'slow down' } }, 'slow down', new Headers()));
     expect(await said(busy)).toBe('Claude’s rate limit was hit. Try again in a minute.');
+  });
+
+  it('don’t wait on the database to decide, when the database may be what’s down', async () => {
+    tempRepo();
+    alertsOn();
+    vi.spyOn(getRepo(), 'hit').mockReturnValue(new Promise(() => {}));
+    const started = Date.now();
+    expect(await sendAlert('server', ['Couldn’t reach the database.'])).toBe(true);
+    expect(await sendAlert('server', ['Couldn’t reach the database.'])).toBe(false);
+    expect(Date.now() - started).toBeLessThan(5000);
   });
 
   it('say what Resend said when the test from Setup doesn’t go', async () => {

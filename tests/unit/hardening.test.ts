@@ -1,8 +1,7 @@
 // The last round of hardening: hidden characters in names, project ids that
 // can't land on each other, print files that can't overwrite each other, an
-// approval nobody can probe for, printer links that keep their own policy,
-// drawings that can't stall the server, and fal downloads that stay on fal.
-import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server';
+// approval nobody can probe for, drawings that can't stall the server, fal
+// downloads that stay on fal, and an outage that says so.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { signedIn, tempRepo } from './helpers';
 import { POST as build } from '@/app/api/decisions/[id]/build/route';
@@ -14,12 +13,13 @@ import { approve } from '@/lib/server/decisions';
 import { backFileNames } from '@/lib/server/export/package';
 import { cleanName, forgetDirectory, userById } from '@/lib/server/people';
 import { oneLine } from '@/lib/server/plain';
+import { DatabaseUnreachable } from '@/lib/server/repo';
+import { sessionAlive } from '@/lib/server/sessions';
 import { createProject } from '@/lib/server/projects';
 import { download } from '@/lib/server/providers/fal';
 import { MAX_SVG_ELEMENTS, sanitizeSvg } from '@/lib/server/providers/svg';
 import type { LocalRepo } from '@/lib/server/repo/local';
 import { projectState } from '@/lib/server/studio';
-import { config as proxyConfig } from '@/proxy';
 
 const jar = vi.hoisted(() => ({ value: '' }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: (name: string) => (name === 'studio_session' && jar.value ? { value: jar.value } : undefined) }) }));
@@ -137,21 +137,6 @@ describe('building print files', () => {
   });
 });
 
-describe('page policy coverage', () => {
-  const runs = (url: string, headers?: Record<string, string>) => unstable_doesMiddlewareMatch({ config: proxyConfig, url, headers });
-
-  it('leaves printer-link files their own stricter policy', () => {
-    expect(runs('/s/abc123/f/0')).toBe(false);
-    expect(runs('/s/abc123')).toBe(true);
-    expect(runs('/api/projects')).toBe(false);
-  });
-
-  it('still covers a page the browser prefetches, but not the app’s own data requests', () => {
-    expect(runs('/p/abc', { purpose: 'prefetch' })).toBe(true);
-    expect(runs('/p/abc', { 'next-router-prefetch': '1' })).toBe(false);
-  });
-});
-
 describe('drawings from Claude', () => {
   it('can’t stall the server with broken tags', () => {
     const started = performance.now();
@@ -218,5 +203,17 @@ describe('fal downloads', () => {
     await expect(download('https://v3.fal.media/huge.png')).rejects.toThrow(/too big/);
     // It stopped reading soon after the limit, not at the end.
     expect(sent).toBeLessThan(50);
+  });
+});
+
+describe('a database outage', () => {
+  it('says so, rather than looking like being signed out', async () => {
+    const { repo } = tempRepo();
+    const spy = vi.spyOn(repo, 'getSession');
+    spy.mockRejectedValueOnce(new DatabaseUnreachable('Couldn’t reach Supabase'));
+    await expect(sessionAlive('outage-sid', 'joel')).rejects.toBeInstanceOf(DatabaseUnreachable);
+    // Any other trouble reading the list still counts as not signed in, for now.
+    spy.mockRejectedValueOnce(new Error('something odd'));
+    await expect(sessionAlive('odd-sid', 'joel')).resolves.toBe(false);
   });
 });

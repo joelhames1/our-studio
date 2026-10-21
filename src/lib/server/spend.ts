@@ -18,6 +18,10 @@ export function monthStart(d = new Date()): string {
 }
 
 const round = (usd: number) => Math.round(Math.max(0, usd) * 10000) / 10000;
+/** How a hold reads until its call settles it. */
+const IN_PROGRESS = ' (in progress)';
+/** Longer than any request runs, so a hold still in progress after this was cut off. */
+const CUT_OFF_AFTER_MS = 15 * 60_000;
 const cents = (usd: number) => Math.round(usd * 100) / 100;
 /** Whose budget an entry came out of; older entries were all the first household's. */
 export const householdOfSpend = (r: SpendEntry): HouseholdId => r.householdId ?? FIRST_HOUSEHOLD;
@@ -79,7 +83,7 @@ export async function reserveSpend(provider: string, model: string, estimateUsd:
   const householdId = await whose(projectId);
   if (!(estimateUsd > 0)) return (usd, trouble) => recordSpend(provider, model, usd, note, projectId, trouble, householdId);
   const repo = getRepo();
-  const hold: SpendEntry = { id: newId(), at: new Date().toISOString(), provider, model, usd: round(estimateUsd), note: `${note} (in progress)`, projectId, householdId };
+  const hold: SpendEntry = { id: newId(), at: new Date().toISOString(), provider, model, usd: round(estimateUsd), note: `${note}${IN_PROGRESS}`, projectId, householdId };
   await repo.addSpend(hold);
   const totals = await repo.spendTotals(monthStart());
   const mine = cents(totals.get(householdId) ?? 0);
@@ -125,4 +129,28 @@ export async function recordSpend(provider: string, model: string, usd: number, 
   } catch (e) {
     console.error('Could not record spend', e);
   }
+}
+
+/**
+ * Holds whose request was stopped before it could settle them (Vercel ending
+ * a request that ran past its time, say), settled at a realistic figure so
+ * they don't quietly eat a household's month at the worst-case price. A
+ * painting may well have been billed, so it keeps its hold; a Claude call is
+ * counted at a quarter of its hold, more than one cut short usually costs.
+ * Run nightly; says how many it settled.
+ */
+export async function settleCutOff(now = Date.now()): Promise<number> {
+  const repo = getRepo();
+  let settled = 0;
+  for (const r of await repo.listSpendSince(new Date(now - 32 * 86_400_000).toISOString())) {
+    if (!r.note.endsWith(IN_PROGRESS) || now - Date.parse(r.at) < CUT_OFF_AFTER_MS) continue;
+    await repo.updateSpend({
+      ...r,
+      usd: r.provider === 'anthropic' ? round(r.usd / 4) : r.usd,
+      note: `${r.note.slice(0, -IN_PROGRESS.length)} (cut off)`,
+      trouble: { message: 'The request was stopped before it finished.', transient: true },
+    });
+    settled++;
+  }
+  return settled;
 }

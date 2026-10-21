@@ -7,7 +7,7 @@ import { config, MIN_TOKEN_LENGTH } from './config';
 import { directoryCounts, FIRST_HOUSEHOLD, listHouseholds, membersOf } from './people';
 import { openInvites } from './invites';
 import { sendTestAlert } from './alerts';
-import { backUp, lastBackup, type BackupSummary } from './backup';
+import { backUp, backupIsStale, lastBackup, type BackupSummary } from './backup';
 import { getRepo, SetupNeeded } from './repo';
 import { aiTrouble, imageTrouble, type ServiceTrouble } from './health';
 import { getImageProvider } from './providers';
@@ -39,7 +39,7 @@ export interface SetupStatus {
   invites: { ready: boolean; open: { id: string; name: string; householdName?: string; expiresAt: string }[] };
   storage: { kind: 'local' | 'supabase' | 'missing'; ok: boolean; message: string };
   /** The nightly copy of the database: whether Vercel can start it, and the last one. */
-  backups: { scheduled: boolean; last: BackupSummary | null; suggestedSecret: string };
+  backups: { scheduled: boolean; last: BackupSummary | null; stale: boolean; suggestedSecret: string };
   /** Emails when something breaks: whether they're on, and to and from whom. */
   alerts: { on: boolean; keySet: boolean; to: string | null; from: string };
   claude: { connected: boolean; model: string };
@@ -95,6 +95,7 @@ export async function setupStatus(origin: string): Promise<SetupStatus> {
   // Shown masked; the copy button fetches the real link (see /api/admin/link).
   const masked = (t?: string) => (t ? `${origin}/k#${t.slice(0, 4)}…${t.slice(-4)}` : null);
   const token = () => randomBytes(24).toString('hex');
+  const lastCopy = storage.ok ? await lastBackup() : null;
   return {
     links: {
       configured: !!(config.erinToken && config.joelToken),
@@ -131,7 +132,7 @@ export async function setupStatus(origin: string): Promise<SetupStatus> {
     households: await householdsStatus(),
     invites: await invitesStatus(),
     storage,
-    backups: { scheduled: !!config.cronSecret, last: storage.ok ? await lastBackup() : null, suggestedSecret: token() },
+    backups: { scheduled: !!config.cronSecret, last: lastCopy, stale: backupIsStale(lastCopy), suggestedSecret: token() },
     alerts: { on: config.alertsOn, keySet: !!config.resendKey, to: config.alertEmail ?? null, from: config.emailFrom },
     claude: { connected: !!config.anthropicKey, model: config.anthropicModel },
     art: { provider: provider.id, label: provider.label, model: provider.model, practice: provider.id === 'mock' },
@@ -221,6 +222,7 @@ export async function testConnection(target: TestTarget): Promise<string> {
       note: 'connection test',
       effort: 'low',
       maxTokens: 2000,
+      deadlineMs: 30_000,
       system: 'Reply with a very short, cheerful greeting for Joel and Erin.',
       content: 'Say hi in five words or fewer.',
     });

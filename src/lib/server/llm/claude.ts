@@ -68,32 +68,52 @@ export function claudeTrouble(e: unknown): Trouble | undefined {
   return { message, transient };
 }
 
+/** A generous guess at how fast Claude writes, for what a call cut off partway probably cost. */
+const TOKENS_PER_SECOND = 100;
+
 /**
  * One structured request. Uses structured outputs (forced tool choice isn't
  * available on current models) and opts into server-side refusal fallbacks.
+ * `deadlineMs` is the whole call, retries included: set it so whatever calls
+ * this still has time to fall back (keywords for a tweak, templates for art
+ * direction) before its route runs out of time.
  */
 export async function ask<T extends z.ZodType>(
   schema: T,
-  opts: { system: string; content: Content; effort?: 'low' | 'medium' | 'high'; maxTokens?: number; note: string },
+  opts: { system: string; content: Content; effort?: 'low' | 'medium' | 'high'; maxTokens?: number; note: string; deadlineMs?: number },
 ): Promise<z.infer<T>> {
   const model = config.anthropicModel;
   const claude = anthropic();
   const maxTokens = opts.maxTokens ?? 16000;
+  const deadlineMs = opts.deadlineMs ?? 90_000;
   // Hold the most this call could cost before sending it; settle once Claude answers.
   const [holdIn, holdOut] = PRICES[model] ?? PRICES['claude-opus-5-5'];
-  const settle = await reserveSpend('anthropic', model, (inputEstimate(opts.system, opts.content) * holdIn + maxTokens * holdOut) / 1_000_000, opts.note);
+  const inputCost = (inputEstimate(opts.system, opts.content) * holdIn) / 1_000_000;
+  const holdUsd = inputCost + (maxTokens * holdOut) / 1_000_000;
+  const settle = await reserveSpend('anthropic', model, holdUsd, opts.note);
+  const started = Date.now();
+  const signal = AbortSignal.timeout(deadlineMs);
   let res;
   try {
-    res = await claude.beta.messages.parse({
-      model,
-      max_tokens: maxTokens,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      system: opts.system,
-      output_config: { format: betaZodOutputFormat(schema), effort: opts.effort ?? 'medium' },
-      messages: [{ role: 'user', content: opts.content }],
-    });
+    res = await claude.beta.messages.parse(
+      {
+        model,
+        max_tokens: maxTokens,
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        system: opts.system,
+        output_config: { format: betaZodOutputFormat(schema), effort: opts.effort ?? 'medium' },
+        messages: [{ role: 'user', content: opts.content }],
+      },
+      { signal, timeout: deadlineMs },
+    );
   } catch (e) {
+    if (signal.aborted) {
+      // Cut off: count what it could have written in the time it had, not the worst case.
+      const wrote = ((Date.now() - started) / 1000) * TOKENS_PER_SECOND;
+      await settle(Math.min(holdUsd, inputCost + (wrote * holdOut) / 1_000_000), { message: 'Claude took too long to answer.', transient: true });
+      throw new ClaudeFailed('Claude took too long that time. Try again in a moment.');
+    }
     await settle(0, claudeTrouble(e));
     throw e;
   }

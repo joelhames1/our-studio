@@ -2,7 +2,7 @@ import { sendAlert } from './alerts';
 import { ADMIN, HttpError } from './auth';
 import { withContext } from './context';
 import { ClaudeFailed, claudeProblem, claudeTrouble } from './llm/claude';
-import { SetupNeeded } from './repo';
+import { DatabaseUnreachable, SetupNeeded } from './repo';
 
 type Ctx<P> = { params: Promise<P> };
 
@@ -43,13 +43,17 @@ async function handle<P>(fn: (req: Request, params: P) => Promise<unknown>, req:
     return Response.json(out ?? { ok: true }, { headers: NO_STORE });
   } catch (e) {
     if (e instanceof HttpError) return Response.json({ error: e.message }, { status: e.status, headers: NO_STORE });
+    const where = `${req.method} ${new URL(req.url).pathname}`;
+    // What's wrong (and where the database lives) is for Joel, in the alert and on Setup; not for whoever asked.
+    if (e instanceof DatabaseUnreachable) {
+      await sendAlert('server', [`Couldn’t reach the database (${where}).`, e.message]);
+      return Response.json({ error: 'Can’t reach the database right now. Try again in a minute.' }, { status: 503, headers: NO_STORE });
+    }
     if (e instanceof SetupNeeded) {
-      // What's missing (and where the database lives) is for Joel, in the alert and on Setup; not for whoever asked.
-      await sendAlert('server', [`The database isn’t set up right (${req.method} ${new URL(req.url).pathname}).`, e.message]);
+      await sendAlert('server', [`The database isn’t set up right (${where}).`, e.message]);
       return Response.json({ error: 'A couple of things are still being set up. Try again soon.', setup: true }, { status: 503, headers: NO_STORE });
     }
     console.error(e);
-    const where = `${req.method} ${new URL(req.url).pathname}`;
     const why = e instanceof Error ? e.message : String(e);
     const claude = claudeProblem(e);
     if (claude) {

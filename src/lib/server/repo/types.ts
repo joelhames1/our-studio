@@ -4,6 +4,13 @@ import type { Printer } from '@/lib/kinds/printers';
 /** Storage isn't usable yet; the message says what to fix. Shown to Joel on Home and Setup. */
 export class SetupNeeded extends Error {}
 
+/**
+ * Storage can't be reached just now: an outage, a paused project, or a call
+ * that took too long. The message, with where and why, is for Joel; everyone
+ * else is told to try again in a minute.
+ */
+export class DatabaseUnreachable extends Error {}
+
 /** Everyone who can sign in, every household, and who's in which. */
 export interface DirectoryData {
   people: Person[];

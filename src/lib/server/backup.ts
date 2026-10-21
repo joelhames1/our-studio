@@ -60,6 +60,10 @@ export async function backUp(now = new Date()): Promise<BackupSummary> {
   return summary;
 }
 
+/** A day and a half: one missed night can be a hiccup; two means the schedule has stopped. */
+export const STALE_AFTER_MS = 36 * 3_600_000;
+export const backupIsStale = (last: BackupSummary | null, now = Date.now()) => !!last && now - Date.parse(last.at) > STALE_AFTER_MS;
+
 /** The last backup, for Setup; null if there hasn't been one. */
 export async function lastBackup(): Promise<BackupSummary | null> {
   try {

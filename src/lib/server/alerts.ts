@@ -45,9 +45,15 @@ const problemOf = (lines: string[]) =>
     .digest('hex')
     .slice(0, 16);
 
+/** How long to wait for the shared counters before going by this server's memory: the database may be the very thing that's down. */
+const COUNTER_WAIT_MS = 1_500;
+
 async function count(key: string, until: number, now: number): Promise<number> {
   try {
-    const n = await getRepo().hit(key, new Date(until));
+    const shared = getRepo().hit(key, new Date(until));
+    // If it answers after we've stopped waiting, that's fine: nothing to catch.
+    shared.catch(() => {});
+    const n = await Promise.race([shared, new Promise<null>((r) => setTimeout(() => r(null), COUNTER_WAIT_MS).unref?.())]);
     if (n !== null) return n;
   } catch {
     // Fall through to this server's own memory.

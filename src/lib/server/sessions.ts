@@ -10,7 +10,7 @@ import { customAlphabet } from 'nanoid';
 import type { SessionRecord, User, UserId } from '@/lib/engine/types';
 import { HttpError } from './errors';
 import { directoryStored, forgetDirectory, personById } from './people';
-import { getRepo } from './repo';
+import { DatabaseUnreachable, getRepo } from './repo';
 
 const newSid = customAlphabet('23456789abcdefghjkmnpqrstuvwxyz', 16);
 const TTL = 30_000;
@@ -96,8 +96,10 @@ function remember(sid: string, rec: SessionRecord | null) {
 }
 
 /**
- * Whether this browser is still signed in. If the list can't be reached, it
+ * Whether this browser is still signed in. If the list can't be read, it
  * isn't, for now: the cookie stays, and works again once the list is back.
+ * If the database can't be reached at all, that's said instead, so nobody
+ * thinks they've been signed out.
  */
 export async function sessionAlive(sid: string, personId: UserId): Promise<boolean> {
   const hit = seen.get(sid);
@@ -106,6 +108,7 @@ export async function sessionAlive(sid: string, personId: UserId): Promise<boole
     try {
       rec = await getRepo().getSession(sid);
     } catch (e) {
+      if (e instanceof DatabaseUnreachable) throw e;
       console.error('Couldn’t check the signed-in browser:', (e as Error).message);
       return false;
     }

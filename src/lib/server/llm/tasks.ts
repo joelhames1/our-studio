@@ -66,6 +66,8 @@ const CopySchema = z.object({
 export async function suggestCopy(current: Copy, hint: string, context: string): Promise<Copy[]> {
   const out = await ask(CopySchema, {
     note: 'word ideas',
+    // Inside the 120 s route, with room to spare.
+    deadlineMs: 75_000,
     system: `You write the words for a T-shirt. ${ABOUT}
 Write six options that each work on a shirt: short, punchy, readable from across a room. Vary the angle: the people, the occasion, the place, an inside joke if there is one. Wrap one or two words in straight double quotes when they should pop visually, like The "Big" Day. No hashtags, no emoji.`,
     content: `${project(context)}Current words:
@@ -138,6 +140,9 @@ export async function interpretTweak(
 ): Promise<(TweakResult & { newArtwork: string | null }) | null> {
   const r = await ask(TweakSchema, {
     note: 'design tweak',
+    // Then keywords take over, well inside the route's time.
+    deadlineMs: 20_000,
+    maxTokens: 4000,
     effort: 'low',
     system: `You turn a plain-English request about a T-shirt design into specific changes. ${ABOUT}
 Only change what the request asks for (or clearly implies); leave everything else null. Pick ids only from these lists:
@@ -220,6 +225,8 @@ export interface ArtConcept {
 export async function writeArtConcepts(count: number, styles: string[], idea: string, copy: Copy, context: string, ideas: string[]): Promise<ArtConcept[]> {
   const out = await ask(ConceptSchema, {
     note: 'art direction',
+    // Then the templates take over.
+    deadlineMs: 60_000,
     system: `You art-direct illustrations for a T-shirt. ${ABOUT}
 The words are added separately by the app, so the illustration must contain no lettering at all. Each prompt describes ONE centered subject that reads well small on a chest print, in flat colors drawn from its palette (use the hex codes). Make the concepts genuinely different from each other.
 PALETTES: ${PALETTES.map((p) => `${p.id}: ${[p.light.text, p.light.accent, p.light.accent2, ...p.light.sun, ...p.light.water].join(' ')}`).join('; ')}`,
@@ -243,6 +250,8 @@ const CheckSchema = z.object({
 export async function checkArt(png: Buffer): Promise<{ hasLettering: boolean; printable: boolean; note: string }> {
   return ask(CheckSchema, {
     note: 'art check',
+    // Then the artwork is kept unchecked.
+    deadlineMs: 30_000,
     effort: 'low',
     maxTokens: 2000,
     system: 'You check AI-generated T-shirt artwork before a person sees it. Be strict about lettering: even a single stray letter or squiggle that looks like writing counts.',
@@ -257,6 +266,7 @@ const SvgSchema = z.object({ svg: z.string().describe('A complete <svg> element'
 export async function drawSvg(subject: string, styles: string[], colors: string[]): Promise<string> {
   const out = await ask(SvgSchema, {
     note: 'vector art',
+    deadlineMs: 200_000,
     effort: 'high',
     maxTokens: 32000,
     system: `You are an illustrator drawing clean vector artwork for a T-shirt print.
@@ -304,6 +314,7 @@ export type ProjectDraft = z.infer<typeof DraftSchema>;
 export async function draftProject(sentence: string, today: string): Promise<ProjectDraft> {
   return ask(DraftSchema, {
     note: 'new project draft',
+    deadlineMs: 75_000,
     system: `You help someone start a T-shirt project for a celebration or life moment. From their description, fill in the details. Only include facts they gave or that follow directly from them (a birth year from an age and date, a route they described); leave anything else empty. Today is ${today}.`,
     content: sentence.slice(0, 600),
   });

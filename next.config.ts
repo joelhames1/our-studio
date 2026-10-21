@@ -38,6 +38,8 @@ const nextConfig: NextConfig = {
     const quiet = ['/s/:path*', '/join', '/join/:path*', '/k', '/k/:path*', '/api/auth/:path*'];
     return [
       { source: '/:path*', headers: SECURITY_HEADERS },
+      // The shirt fonts never change at an address: a new file gets a new ?v= (scripts/copy-fonts.mjs).
+      { source: '/fonts/:file*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
       ...quiet.map((source) => ({ source, headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }] })),
     ];
   },

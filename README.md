@@ -130,6 +130,17 @@ A private two-person app on a public URL, so the sign-in and the spend guard do 
 - **Printer links** are the other deliberately public thing: `/s/<id>.<secret>` with a 192-bit random secret, of which only a hash is stored. They show one order's details and files, work for 14 days, and stop at once when turned off or when the design is reopened. The secret is in the path, so it will appear in Vercel's request logs (alert emails blank it out).
 - **What leaves for the AI providers**: names, places and dates in prompts to Anthropic, and art prompts to fal.ai or OpenAI (fal returns the pictures inline rather than hosting them). No booking references or payment details are ever in the app.
 
+## Reliability
+
+What happens when something the app depends on is slow or down:
+
+- **Supabase**: every call has a deadline (8 seconds, 60 for files) and no quiet retries, so a stalled or paused database fails in seconds instead of holding each request until Vercel gives up at 300. It comes back as `DatabaseUnreachable` (`src/lib/server/repo/types.ts`): people see "Can't reach the database" with Try again, never what looks like being signed out, and Joel gets an alert (counted in memory when the database is what's down). A storage error is never mistaken for a missing file.
+- **Claude**: each call has one deadline covering the SDK's retries, set so the feature's own fallback still runs inside its route: tweaks get 20 seconds before keyword matching takes over, art direction 60 before templates, the artwork check 30 before the artwork is kept unchecked. A call cut off is charged for the time it had, not the worst case. When a tweak's new artwork can't be painted, the rest of the tweak still happens and the summary says so.
+- **Spending holds** left by a request Vercel stopped are settled each night at a realistic figure (`settleCutOff` in `src/lib/server/spend.ts`).
+- **Print builds**: the AI upscale gets a minute, then the build resamples instead.
+- **Backups**: Setup and Joel's home page warn when the last copy is more than a day and a half old.
+- **Speed**: Vercel runs the app in `iad1`, next to the Supabase project (`us-east-1`). The shirt fonts are cached for a year at addresses that carry a hash of each file (`src/lib/design/font-versions.json`, made by `scripts/copy-fonts.mjs`; a test fails if they drift), and start downloading as soon as the preview code arrives.
+
 ## Adding another kind of decision
 
 The storage and voting are kind-agnostic: a project has a `kind` and a `brief`, options carry a `payload`, reactions and decisions don't care what's inside. A new kind (say `trip-pick` for "where to in 2028?") needs its brief/payload types in `src/lib/kinds/`, a generator, a card renderer, and a `finalize` step that produces its deliverable. The shirt is the worked example.

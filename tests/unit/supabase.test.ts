@@ -1,19 +1,20 @@
 // Supabase setup mistakes come back as plain-English advice, not a crashed
-// page. Runs the real Supabase client against a stand-in server that answers
-// the way Supabase does for each mistake.
+// page, and an outage (or a database that stops answering) comes back as one
+// within seconds. Runs the real Supabase client against a stand-in server
+// that answers the way Supabase does for each case.
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { getRepo, setRepo, SetupNeeded } from '@/lib/server/repo';
+import { DatabaseUnreachable, getRepo, setRepo, SetupNeeded } from '@/lib/server/repo';
 import { supabaseConfigProblem, SupabaseRepo } from '@/lib/server/repo/supabase';
 
-type Mode = 'ok' | 'missing' | 'denied' | 'badkey' | 'noprinters';
+type Mode = 'ok' | 'missing' | 'denied' | 'badkey' | 'noprinters' | 'hang' | 'gateway' | 'nofile';
 let mode: Mode = 'ok';
 const paths: string[] = [];
 let server: http.Server;
 let base = '';
 
-const REPLIES: Record<Exclude<Mode, 'ok' | 'noprinters'>, [number, object]> = {
+const REPLIES: Record<Exclude<Mode, 'ok' | 'noprinters' | 'hang' | 'gateway' | 'nofile'>, [number, object]> = {
   missing: [404, { code: 'PGRST205', details: null, hint: null, message: "Could not find the table 'public.projects' in the schema cache" }],
   denied: [403, { code: '42501', details: null, hint: null, message: 'permission denied for table projects' }],
   badkey: [401, { message: 'Invalid API key', hint: 'Double check your Supabase `anon` or `service_role` API key.' }],
@@ -22,8 +23,19 @@ const REPLIES: Record<Exclude<Mode, 'ok' | 'noprinters'>, [number, object]> = {
 beforeAll(async () => {
   server = http.createServer((req, res) => {
     paths.push(req.url ?? '');
+    // Accepts the connection and never answers, like a stalled or paused project can.
+    if (mode === 'hang') return;
+    if (mode === 'gateway') {
+      res.statusCode = 503;
+      res.setHeader('Content-Type', 'text/html');
+      return res.end('<html><body>503 Service Unavailable</body></html>');
+    }
     res.setHeader('Content-Type', 'application/json');
-    if (mode === 'ok' || (mode === 'noprinters' && !req.url?.startsWith('/rest/v1/printers'))) return res.end('[]');
+    if (mode === 'nofile' && req.url?.startsWith('/storage/v1/object/')) {
+      res.statusCode = 400;
+      return res.end(JSON.stringify({ statusCode: '404', error: 'not_found', message: 'Object not found' }));
+    }
+    if (mode === 'ok' || mode === 'nofile' || (mode === 'noprinters' && !req.url?.startsWith('/rest/v1/printers'))) return res.end('[]');
     const [status, body] = REPLIES[mode === 'noprinters' ? 'missing' : mode];
     res.statusCode = status;
     res.end(JSON.stringify(body));
@@ -69,8 +81,43 @@ describe('Supabase setup problems', () => {
   it('says so when Supabase can’t be reached', async () => {
     const repo = new SupabaseRepo('http://127.0.0.1:9', 'sb_secret_test');
     const err = await repo.listProjects().catch((e) => e);
-    expect(err).toBeInstanceOf(SetupNeeded);
+    expect(err).toBeInstanceOf(DatabaseUnreachable);
     expect(err.message).toMatch(/Couldn’t reach Supabase at 127\.0\.0\.1:9/);
+  });
+});
+
+describe('Supabase having a bad day', () => {
+  afterEach(() => {
+    mode = 'ok';
+  });
+
+  it('gives up on a database that stops answering, once, within its deadline', async () => {
+    const repo = new SupabaseRepo(base, 'sb_secret_test', { data: 300, files: 600 });
+    mode = 'hang';
+    paths.length = 0;
+    const started = Date.now();
+    const err = await repo.listProjects().catch((e) => e);
+    expect(err).toBeInstanceOf(DatabaseUnreachable);
+    expect(err.message).toMatch(/Couldn’t reach Supabase at 127\.0\.0\.1:\d+ \(.*(Timeout|abort)/i);
+    expect(Date.now() - started).toBeLessThan(2000);
+    // No quiet retries stretching it out.
+    expect(paths).toHaveLength(1);
+    // Files get their own, longer deadline, and still give up.
+    const file = await repo.getAsset('a/b.png').catch((e) => e);
+    expect(file).toBeInstanceOf(DatabaseUnreachable);
+  });
+
+  it('treats a gateway page as an outage, not a setup mistake', async () => {
+    const repo = new SupabaseRepo(base, 'sb_secret_test');
+    mode = 'gateway';
+    await expect(repo.listProjects()).rejects.toBeInstanceOf(DatabaseUnreachable);
+    await expect(repo.getAsset('a/b.png')).rejects.toBeInstanceOf(DatabaseUnreachable);
+  });
+
+  it('only calls a file missing when storage says it is', async () => {
+    const repo = new SupabaseRepo(base, 'sb_secret_test');
+    mode = 'nofile';
+    await expect(repo.getAsset('a/b.png')).resolves.toBeNull();
   });
 
   it('catches the usual copy-and-paste mix-ups before sending anything', () => {

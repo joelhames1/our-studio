@@ -16,7 +16,7 @@ Claude and fal.ai are optional. Without them the app still works: the built-in a
 ## 1. Supabase (database and file storage)
 
 1. Go to [supabase.com](https://supabase.com) and sign up (GitHub sign-in is quickest).
-2. **New project**. Name it `our-studio`, pick a region near you (West US), let it generate a database password (you won't need it), and create it. It takes a minute or two to spin up.
+2. **New project**. Name it `our-studio`, pick the region **East US (North Virginia)** (`us-east-1`), let it generate a database password (you won't need it), and create it. It takes a minute or two to spin up. That's where Vercel runs the app (`vercel.json` pins it to `iad1`, Washington, D.C.), so every trip to the database is a short one; a page makes several, one after another.
 3. In the left sidebar open **SQL Editor**, then **New query**.
 4. Open [`supabase/migrations/0001_studio.sql`](../supabase/migrations/0001_studio.sql) from this repo, copy the whole thing, paste it in, and press **Run**. You should see "Success. No rows returned". Then do the same with [`0002_hardening.sql`](../supabase/migrations/0002_hardening.sql), which creates the private file bucket and takes away the public roles' access to the tables, [`0003_server_access.sql`](../supabase/migrations/0003_server_access.sql), which makes sure the app's server key can use the tables, [`0004_printers.sql`](../supabase/migrations/0004_printers.sql), which adds the shared printer list, and [`0005_activity_and_limits.sql`](../supabase/migrations/0005_activity_and_limits.sql), which adds the activity log and per-person rate limits. (The Setup page also shows all of them, with a copy button. They're all safe to run again.)
 5. Open **Project Settings** and grab two values:
@@ -178,7 +178,7 @@ Two things that matter more once other people's work is in here: a copy of the d
 ### Nightly backup (5 minutes)
 
 1. **Vercel** → Settings → Environment Variables: add `CRON_SECRET`, Production only, type **Secret**. Setup's **Backups** row suggests a value with a copy button (or run `openssl rand -hex 24`). Then redeploy.
-2. **Setup → Backups → Back up now** to make the first copy straight away. The row then shows when the last copy was made.
+2. **Setup → Backups → Back up now** to make the first copy straight away. The row then shows when the last copy was made. If the last copy is more than a day and a half old, the row turns yellow and your home page says the nightly backup isn't working: a schedule that has stopped never runs far enough to send an alert itself.
 
 From then on, Vercel runs it every night (`vercel.json` asks for 10:17 UTC, about 3am in California; on the free plan it can start any time in that hour). Each copy goes to the private storage named by its date (`backups/2026-10-21.json`), and copies older than 30 days are deleted, so a month of them is always there and something erased is gone from them within 30 days. (Copies from before they were dated, `day-01.json` to `day-31.json`, are cleared as their day comes round.) Nobody can download them through the site; you can in Supabase → Storage → `studio` → `backups`. They guard against mistakes, like a project deleted by accident; restoring one is a job for Claude (`restore` in `src/lib/server/backup.ts`). They don't cover losing the Supabase project itself: Supabase Pro's own daily backups do, and Pro also stops a quiet project being paused after a week.
 
@@ -192,7 +192,7 @@ From then on, Vercel runs it every night (`vercel.json` asks for 10:17 UTC, abou
 6. **Vercel**: add `RESEND_API_KEY` (Production only, type Secret), and `ALERT_EMAIL` with the address the alerts should go to (leave it out to use `CONTACT_EMAIL`). Redeploy.
 7. **Setup → Error alerts → Send a test.** If Resend refuses it, the button says why (most often, the domain isn't verified yet). Check spam the first time, and mark it "not spam".
 
-What sends an alert: a request that fails with an error nobody planned for, a page that crashes, Claude refusing a request, the database not being set up right, the artwork service failing a whole batch, rate limits that can't be counted, and a nightly backup that doesn't save. One email an hour for each problem, and at most three an hour of each kind, so one noisy problem can't hide another; the rest are in Vercel's logs. Alerts say where and what went wrong, never what anyone typed, and printer-link secrets, email addresses and long ids are blanked out. Whoever was using the site sees only what to do next ("The AI isn't working right now"), not the details.
+What sends an alert: a request that fails with an error nobody planned for, a page that crashes, Claude refusing a request, the database not answering or not being set up right, the artwork service failing a whole batch, rate limits that can't be counted, and a nightly backup that doesn't save. One email an hour for each problem, and at most three an hour of each kind, so one noisy problem can't hide another; the rest are in Vercel's logs. Alerts say where and what went wrong, never what anyone typed, and printer-link secrets, email addresses and long ids are blanked out. Whoever was using the site sees only what to do next ("The AI isn't working right now"), not the details.
 
 ## 10. Households
 
@@ -225,6 +225,8 @@ As the owner you can rename the household, and archive or delete any of its proj
 
 **Spending totals (one more SQL step).** Run `supabase/migrations/0008_spend_totals.sql` the same way. It lets the database add up each household's spending for the month, so the budgets count every entry however many there are. Until it's run, the app adds them up itself (slower) and Setup's Storage row says it's missing.
 
+**Requests that get cut off.** Every AI call holds its worst-case cost before it starts and settles the real cost when it finishes. If Vercel stops a request partway, its hold is settled by the nightly job instead: a painting keeps its hold (it may well have been billed), a Claude call counts at a quarter of its, so a few cut-off calls don't quietly use up a household's month.
+
 **AI budgets.** Each household has its own monthly AI limit as well as the site's `MONTHLY_BUDGET_USD`, so one busy household can't use up everyone else's month. New households start at $10; yours has no limit of its own unless you give it one, so only the site's budget applies to it. Change any of them on Setup under **AI spending this month** (**Change** next to each household; it takes effect at once, no redeploy). The site's budget is still the backstop: once it's used up, everyone stops, whatever their own limit. Each household sees its own total on its Household page; only you see everyone's totals, and the list of what was spent on shows only your household's.
 
 ## Running it on a laptop instead
@@ -248,7 +250,9 @@ The usual culprits:
 | refused access to the tables | Run `0003_server_access.sql`. If it still says so, the key is the wrong one (next row). |
 | the activity table isn't there yet | Run `0005_activity_and_limits.sql`. Everything else keeps working until you do; the activity log is just empty and nobody is rate limited. |
 | didn't accept the key / publishable key / anon key | `SUPABASE_SECRET_KEY` must be the **secret** key (starts `sb_secret_`), not the publishable one. Or use the legacy `service_role` key as `SUPABASE_SERVICE_ROLE_KEY`, never `anon`. |
-| couldn't reach Supabase / dashboard address | `SUPABASE_URL` must be the Project URL, `https://<something>.supabase.co`, not the dashboard's address. Check the project isn't paused. |
+| dashboard address | `SUPABASE_URL` must be the Project URL, `https://<something>.supabase.co`, not the dashboard's address. |
+
+**"Can't reach the database".** Supabase didn't answer within 8 seconds (60 for files), or answered with an outage page. Nothing is lost; everyone sees that page with a Try again button instead of waiting, and you get an alert email saying why. On your home page the reason is shown too. Usually the project is paused (free projects pause after a week of quiet: Supabase dashboard → **Restore**) or Supabase is having a bad day ([status.supabase.com](https://status.supabase.com)). If it says it couldn't find the address, `SUPABASE_URL` is wrong.
 
 **"Claude isn't working" on your home page.** Features that use Claude quietly fall back to simpler versions when it fails, so the app keeps track instead: when Claude's last call failed for a reason that won't fix itself (a bad key, a model name it doesn't know), or failed three times running, your home page and **Setup** say so, with Claude's own reason. The same goes for AI artwork. Erin doesn't see it. Fix the setting, redeploy, then press **Test it** on Setup; a call that works clears the warning.
 

@@ -80,7 +80,7 @@ export default async function AdminPage() {
           {s.storage.ok ? <TestButton target="storage" /> : null}
         </Row>
 
-        <Row ok={s.backups.scheduled && !!s.backups.last ? true : 'warn'} title="Backups">
+        <Row ok={s.backups.scheduled && !!s.backups.last && !s.backups.stale ? true : 'warn'} title="Backups">
           <p>
             {s.backups.last ? (
               <>
@@ -90,9 +90,11 @@ export default async function AdminPage() {
             ) : (
               'No copy yet.'
             )}{' '}
-            {s.backups.scheduled
-              ? 'A copy of the database is saved every night, and a month of them is kept, in the same private storage.'
-              : 'Nightly copies are off until CRON_SECRET is set.'}
+            {s.backups.stale && s.backups.scheduled
+              ? 'That’s more than a day and a half ago, so the nightly run has probably stopped: check Vercel → the project → Settings → Cron Jobs.'
+              : s.backups.scheduled
+                ? 'A copy of the database is saved every night, and 30 days of them are kept, in the same private storage.'
+                : 'Nightly copies are off until CRON_SECRET is set.'}
           </p>
           {s.backups.scheduled ? null : (
             <p className="text-sm">
@@ -106,8 +108,8 @@ export default async function AdminPage() {
         <Row ok={s.alerts.on ? true : 'warn'} title="Error alerts">
           {s.alerts.on ? (
             <p>
-              On. When something breaks, an email goes to <Code>{s.alerts.to}</Code> from <Code>{s.alerts.from}</Code>, at most one an hour for each kind of
-              problem.
+              On. When something breaks, an email goes to <Code>{s.alerts.to}</Code> from <Code>{s.alerts.from}</Code>: one an hour for each problem, and at
+              most three an hour of each kind.
             </p>
           ) : (
             <p>

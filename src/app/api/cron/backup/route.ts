@@ -3,6 +3,7 @@ import { eraseDue } from '@/lib/server/account';
 import { sendAlert } from '@/lib/server/alerts';
 import { backUp } from '@/lib/server/backup';
 import { config } from '@/lib/server/config';
+import { settleCutOff } from '@/lib/server/spend';
 
 export const maxDuration = 60;
 
@@ -11,7 +12,8 @@ const digest = (s: string) => createHash('sha256').update(s).digest();
 
 /**
  * The nightly backup, started by Vercel (vercel.json), then erasing any closed
- * accounts whose 30 days are up. Vercel sends CRON_SECRET with each scheduled
+ * accounts whose 30 days are up and settling spending holds left by requests
+ * that were cut off. Vercel sends CRON_SECRET with each scheduled
  * run; without it, nobody else can start one.
  */
 export async function GET(req: Request) {
@@ -30,7 +32,14 @@ export async function GET(req: Request) {
       console.error('Erasing closed accounts failed:', (e as Error).message);
       await sendAlert('server', ['Erasing closed accounts whose 30 days are up didn’t work tonight; it tries again tomorrow.', `Why: ${(e as Error).message}`]);
     }
-    return Response.json({ ...backup, erased }, { headers: NO_STORE });
+    // Spending holds whose requests were cut off, so they stop counting at the worst-case price.
+    let cutOff = 0;
+    try {
+      cutOff = await settleCutOff();
+    } catch (e) {
+      console.error('Settling cut-off spending failed:', (e as Error).message);
+    }
+    return Response.json({ ...backup, erased, cutOff }, { headers: NO_STORE });
   } catch (e) {
     const message = (e as Error).message;
     console.error('Nightly backup failed:', message);

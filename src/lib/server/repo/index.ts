@@ -3,11 +3,11 @@ import path from 'node:path';
 import { config } from '../config';
 import { LocalRepo } from './local';
 import { supabaseConfigProblem, SupabaseRepo } from './supabase';
-import { SetupNeeded, type Repo } from './types';
+import { DatabaseUnreachable, SetupNeeded, type Repo } from './types';
 
 let repo: Repo | null = null;
 
-export { SetupNeeded };
+export { DatabaseUnreachable, SetupNeeded };
 
 export function getRepo(): Repo {
   if (repo) return repo;

@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
-import { getUser } from '@/lib/server/auth';
+import { ADMIN, getUser } from '@/lib/server/auth';
 import { getHousehold, membersOf, nameOf, needsWelcome } from '@/lib/server/people';
 import { config } from '@/lib/server/config';
 import { REFUSALS, type Refusal } from '@/lib/server/google';
-import { aiTrouble, type ServiceTrouble } from '@/lib/server/health';
+import { aiTrouble, backupTrouble, type ServiceTrouble } from '@/lib/server/health';
 import { archivedCount, projectSummaries, type ProjectSummary } from '@/lib/server/overview';
-import { SetupNeeded } from '@/lib/server/repo';
+import { DatabaseUnreachable, SetupNeeded } from '@/lib/server/repo';
 import { approverOf } from '@/lib/server/studio';
 import { Greeting } from '@/components/Greeting';
 import { helloIn, TZ_COOKIE } from '@/lib/engine/greeting';
@@ -18,6 +18,7 @@ import { LegalLinks } from '@/components/Legal';
 import { sharedCount } from '@/lib/engine/together';
 import { OCCASION_PRESETS } from '@/lib/design/occasions';
 import { HOW_MONEY, HowItWorks } from '@/components/HowItWorks';
+import { OutageNotice } from '@/components/Outage';
 import { WelcomeCard } from '@/components/WelcomeCard';
 
 export const dynamic = 'force-dynamic';
@@ -35,8 +36,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
   let trouble: ServiceTrouble[] = [];
   try {
     [projects, archived] = await Promise.all([projectSummaries(user), archivedCount(user)]);
-    if (user.admin) trouble = await aiTrouble();
+    if (user.admin) {
+      const [ai, backups] = await Promise.all([aiTrouble(), backupTrouble()]);
+      trouble = backups ? [...ai, backups] : ai;
+    }
   } catch (e) {
+    if (e instanceof DatabaseUnreachable) return <OutageNotice admin={ADMIN.name} problem={user.admin ? e.message : undefined} />;
     if (e instanceof SetupNeeded) return <SetupNotice isJoel={user.admin} problem={e.message} />;
     throw e;
   }
