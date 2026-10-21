@@ -1,0 +1,22 @@
+node_modules/
+.next/
+out/
+.data/
+.data-e2e/
+.data-smoke/
+*.tsbuildinfo
+next-env.d.ts
+test-results/
+playwright-report/
+.vercel
+.DS_Store
+
+# Secrets never go in the repo: every .env file is ignored except the example.
+.env*
+!.env.example
+
+# Screenshots and previews made while designing.
+shots/
+/*.png
+/*.jpg
+supabase/.temp/

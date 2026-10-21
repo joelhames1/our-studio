@@ -1,0 +1,141 @@
+# Our Studio
+
+A little app for households to design shirts together, vote on them, and approve a final: trips, anniversaries, birthdays, graduations, reunions, or just because. On a laptop it starts with a made-up sample project (Sam and Alex's week in Lisbon, `src/lib/design/seed.ts`); real projects keep all their details in their own records.
+
+Erin opens one private link on her phone, flips through designs on a shirt, hearts the ones she likes, asks for changes in plain English ("less cheesy, more turquoise"), and taps **Yes, this is the one**. Out comes a print-ready package for the shop.
+
+**Setting it up?** Follow [docs/SETUP.md](docs/SETUP.md).
+
+## What it does
+
+- **Browse** a deck of designs on a shirt mockup. Swipe or tap love / maybe / pass. Undo, "more like this", "change something", look closer.
+- **Vibes**: eight visual directions (retro travel poster, minimal line art, boarding pass and so on) that steer new designs.
+- **Words**: edit the headline, tagline and small line with a live preview. Wrap words in "quotes" to make them pop, like "Grand" in the sample's `Sam & Alex's 25th "Grand" Tour`. Claude suggests alternatives.
+- **Colors**: on a design's page, pick an exact color for each part of the lettering (big words, the "quoted" words, small words, tiny line, outline, shadow) from 24 named inks or any color at all, or switch the whole color scheme. Tap the words on the panel's preview to pick which part you're coloring. The shirt shows each pick as you make it, and nothing saves until you make it a new version, so the original stays put. A picked color stays the same on every shirt color: the panel and the approve page say when one would be hard to read, and the panel counts how many inks it prints in (screen printers charge per color). "Change something" understands the same thing in words: "make the Grand coral and the rest navy" colors just those words and leaves everything else alone, with or without Claude.
+- **Try it on**: tee, long sleeve or hoodie in twelve colors, close-up, whole shirt, or just the art. Inks automatically switch for dark shirts.
+- **360° 3D try-on**: on "Look closer" and the final "Pick the one" screen, tap 3D to see the design on a mannequin wearing the chosen garment and color. Drag to spin, pinch to zoom, jump to front or back, and switch between Erin's fit and Joel's fit. The print is projected at its true size in inches, so a 12" print looks 12" on the chest. Shirt colors are calibrated to read close to their swatches.
+- **The back**: a library of back templates that all draw from one set of details you fill in once (names, the route, the numbers, a timeline, a place). Heart backs the same way as fronts; they borrow the front's fonts and colors (including colors picked for particular words) unless you give them their own. Big back print or a small one under the collar. See [Back templates](#back-templates).
+- **Everyone votes**: each person in the household hearts designs; the ones more of you love float to the top, with "Both" for two people and "3 of 4" or "Everyone" for more (and, for more than two, the initials of who loves each one in Favorites and Compare). Passes and maybes stay private, however many are voting. Whoever started a project makes the final call until it's handed on: whoever has it, whoever started the project, or the household's owner can give it to anyone in the household (**Final say · Change** on the project page) until it's approved. The wording lives in `src/lib/engine/together.ts`.
+- **Changing your mind**: Undo on Browse steps back through your last ten swipes, even after you leave the screen. Passes wait on a private **Passed** tab in Favorites; open one and heart it to bring it back.
+- **Archive**: put away a single design for both of you ("Archive for both of us" on its page). It drops out of Browse, Favorites, Compare and the counts, and waits under **Archived** in Favorites with when it was made and when and by whom it was archived; **Restore** brings it back with its hearts. Whole projects can be archived too (approved ones included) from the bottom of their page, where you can also **rename** them. The **Archived** page (from the home screen or the sidebar) shows each one with a picture, who started and archived it and when (times too, when two share a name), and **Restore**. Test projects can be **deleted for good** from there by whoever started them (or Joel), by typing the name: that removes their designs, hearts, artwork and print files. Approved projects, and any project marked kept for good, can't be deleted.
+- **Start something new**: pick the occasion (trip, anniversary, birthday, graduation, reunion, team, just because), fill in a few basics, pick from six starter word sets, and a project appears with fronts, backs and details made for it. With Claude connected you can just describe it in a sentence and it fills in the form. See [New projects](#new-projects).
+- **AI artwork** (optional): Claude art-directs, fal.ai or OpenAI paints, Claude checks the result for stray lettering, then it becomes a new design. No key? Claude can draw vector art instead, and there's a free practice artist on a laptop.
+- **Print package** on approval: a 300 DPI transparent sRGB PNG at the chosen print size, a 4500 × 5400 master, a dark-shirt variant, a vector SVG, a PDF order sheet with sizes, placement, inks and the exact wording, all zipped. With a back: back print files (one per person for name-and-number backs), a back vector, a front-and-back picture, and a second order-sheet page for the back.
+- **Find a printer** (on the final screen): type a ZIP code and Claude searches the web for print shops near it and online services that ship there, reading each one's own site for how they print, minimums, turnaround, whether they'll use shirts you bring, file requirements, how to send artwork and any published prices. Each printer gets a check against your actual order (ink colors, one name per shirt, minimums, dark fabric), with links to where the details came from. The list is shared and kept across projects: save the good ones, mark the one you used. A ZIP code's results are reused for 30 days, for any project, so typing it again shows them straight away at no cost; **Refresh** searches again sooner, and a refresh drops shops that no longer turn up unless you saved them. **Send them the files** makes a private link to a printer-facing page (order details, mockups, every file) plus a ready-to-send email.
+- **On a laptop** (1024px and wider): a sidebar with every project and what's new in each, a home page that says what's waiting on you, and split screens with the shirt pinned on the left: Browse has the design's details, a "change something" box and the next few designs beside the card; a design's own page, the back, Approve, the hub, words and print files all keep the shirt in view while you work on the right. Wider galleries with love / maybe / pass on hover, panels that open down the right-hand side (so the shirt stays visible), and keyboard shortcuts for browsing (arrows or L / M / P to react, Z to undo, Enter to look closer, ? for the list). Browse can also show every new design at once as a **grid** (arrow keys move, L / M / P react, **Pass on the rest** clears what's left). Phones are unchanged.
+- **Compare**: tick two to four designs in Favorites (or "Add to compare" on a design's page) and see them side by side on the same shirt, with each one's details, whether the other person has hearted it, your reaction and "Choose this". The comparison is a link: copy it and the other person opens the same set (two across on a phone, swipe for the rest).
+- **Activity**: a log of who approved, reopened, archived, restored, renamed or deleted what and when, plus new projects and sign-ins (from the home screen or the sidebar; **History** on a project's page shows just that one). Each person sees their own sign-ins; Joel sees everyone's. A deleted project's entries stay.
+- **Spend guard**: monthly AI budget for the site (default $25) and one per household (new ones $10, Joel's none of its own unless he sets one), set on Joel's Setup page, plus per-person rate limits (below).
+- **Agreeing to AI**: the first time each person signs in, a short welcome says what's sent to Claude and the artwork service, and nothing is sent until they press OK. The agreement goes in the activity log with its date (seen by that person and Joel). Every route that calls an AI service checks it first (`beforeAI` in `src/lib/server/consent.ts`); bump `CONSENT_VERSION` there to ask everyone again after a change worth telling people about.
+- **Sign out**: at the foot of the sidebar on a laptop, at the bottom of the home screen on a phone.
+- **Backups and alerts**: a copy of the database every night, a month of them kept in private storage (`src/lib/server/backup.ts`, started by Vercel's schedule in `vercel.json`), and an email through Resend when something breaks, at most one an hour for each kind of problem (`src/lib/server/alerts.ts`). See section 9 of the setup guide.
+
+## The one design decision worth knowing
+
+The AI never draws the words. Image models still mangle ampersands, apostrophes and quote marks, and `Sam & Alex's 25th "Grand" Tour` has all three. So every design has two layers: artwork (built-in vector scenes or AI paintings, never containing text) and lettering set by the app with real fonts, converted to vector outlines. Spelling is guaranteed, text styles change instantly for free, and the browser preview and the 300 DPI print file come from the same renderer.
+
+## Back templates
+
+Each template has a few layouts and says which occasions it suits, so the same library works for trips, anniversaries, birthdays, graduations, reunions and teams.
+
+| Template | Layouts | Good for |
+|---|---|---|
+| Flight Path | departures line, winding route, split-flap arrivals board | trips |
+| Tour Dates | two columns, arched names | trips, reunions, milestone weekends |
+| By the Numbers | grid, stat sheet, receipt ("TOTAL: PRICELESS") | anniversaries, birthdays, graduations |
+| Timeline | top to bottom, side to side | anniversaries, milestone birthdays |
+| Est. / Class of | round stamp, label, varsity (small, under the collar by default) | anniversaries, birthdays, graduations |
+| Coordinates | stacked, compass | trips, weddings, hometowns |
+| Big Statement | stacked, script | anything |
+| Name & Number | arched or straight name over a big number; every shirt gets its wearer's name | birthdays, teams, couples |
+| The Crew | roster, line-up, badge (shows up once there are three or more people) | reunions, teams, group trips |
+
+Trip details are airport codes, places and dates only. Booking references and flight numbers stay out of the app. Coordinates can be flagged as unchecked in the details form until someone checks them on a map.
+
+A new template is one file in `src/lib/design/back/templates/` with a `build(kit)` function; `kit.ts` has the text, rule, dot, plane and star helpers, and every word goes through the same outline renderer as the front.
+
+## New projects
+
+Each occasion is a preset in `src/lib/design/occasions.ts`: the questions it asks, the built-in artwork and vibes that suit it, six starter word sets written from the names and numbers, the back details it starts with, and art ideas for the AI. So a birthday gets balloons, cake and confetti (never palm trees), a graduation gets a cap and a laurel, and a trip keeps the sunsets and planes. Seven drawings were added for this: balloons, a birthday cake, a graduation cap, a laurel wreath, two hearts, a champagne toast and confetti, plus three vibes (Party Pop, Varsity, Sweet & Simple).
+
+Claude is told about each project from its own details (a project can carry its own backstory, art ideas and art styles in its record), so suggested words and art direction fit the occasion. Projects can be archived from their hub by whoever started them.
+
+## Running locally
+
+```bash
+npm install
+npm run dev          # http://localhost:3000, pick "I'm Erin" or "I'm Joel"
+npm test             # unit tests (typography, rendering, generator, tweaks, full approve-to-print flow)
+npm run test:e2e     # Erin's whole journey, and Joel starting a birthday shirt, in a phone-sized browser
+npm run lint         # type check
+```
+
+No keys needed locally; data goes in `./.data`. Copy `.env.example` to `.env.local` to try the AI features.
+
+Handy scripts:
+
+```bash
+npx tsx scripts/preview.ts out.png white      # contact sheet of layouts on a shirt color
+npx tsx scripts/preview-mockups.ts out.png    # the seed design on every garment
+npx tsx scripts/preview-backs.ts out.png navy # every back template and layout (optional 3rd arg: an occasion's starter details)
+npx tsx scripts/preview-occasions.ts motifs out.png          # every built-in drawing, solid and line, light and dark
+npx tsx scripts/preview-occasions.ts fronts out.png birthday # starter fronts for an occasion (or all of them)
+node scripts/shots.mjs ./shots                 # phone screenshots of each screen (dev server running)
+node scripts/shots-3d.mjs ./shots              # 3D mannequin renders from fixed angles (uses /lab/3d, dev only)
+node scripts/ui-audit.mjs ./shots/audit http://localhost:3300  # every screen and sheet at four sizes: flags anything a bottom bar covers
+```
+
+## How it's built
+
+- **Next.js 16** (App Router) + TypeScript + Tailwind, deployed on **Vercel**.
+- **Supabase** for Postgres (one jsonb table per record type) and private file storage; a local JSON file + folder on a laptop.
+- **opentype.js** turns text into SVG paths; **resvg** and **sharp** render print files; **pdf-lib** makes the order sheet; **fflate** zips.
+- **three.js** for the 3D try-on: mannequins and garments are built procedurally in code (no downloaded models), with the design applied as a projected decal. It's lazy-loaded, so only the 3D view pays for it.
+- **Claude** via the Anthropic SDK (structured outputs, refusal fallbacks on); **fal.ai** or **OpenAI** for artwork.
+
+```
+src/lib/design/      Pure, shared by browser and server: text engine, layouts, motifs,
+                     palettes, colors for particular words, garments, generator,
+                     keyword tweaks
+src/lib/design/back/ Back prints: the details model, template library, renderer, generator
+src/lib/engine/      Generic decision engine types (projects, options, reactions, decisions)
+src/lib/kinds/       What a "shirt" project holds; future kinds live alongside
+src/lib/three/       3D try-on: body proportions, garments, mannequin, materials, print decal, stage
+src/lib/server/      Storage, auth, AI (llm/, providers/), print export (export/)
+src/app/             Screens: home, /new, /p/[id]/{vibe,words,browse,o/[optionId],back,b/[optionId],favorites,approve,done}, /admin
+src/components/      UI pieces (ShirtPreview, swipe deck, sheets, pickers)
+supabase/migrations/ One-time database setup SQL
+public/fonts/        Bundled open-licensed shirt fonts (see LICENSES.txt)
+```
+
+## Security
+
+A private two-person app on a public URL, so the sign-in and the spend guard do the heavy lifting:
+
+- **Sign-in**: "Continue with Google" straight to Google with the site's own OAuth client (`src/lib/server/google.ts`), done server-side with PKCE: a one-time verifier waits in a short-lived httpOnly cookie, so a code that comes back to any other browser is useless. The app asks only for `openid email`, trades the code at Google's token endpoint, and checks the ID token's issuer, audience, expiry and `email_verified` (it comes straight from Google over HTTPS, so the signature isn't re-checked, per OpenID Connect Core 3.1.3.7). Only addresses that belong to someone in a household get in; anyone else is turned away and nothing is kept. Without `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` the same flow runs through Supabase Auth instead, with Supabase's tokens discarded and a stranger's Supabase record deleted. Either way you get the app's signed session cookie (HMAC, one year, httpOnly, SameSite=Lax). "Email me a code" (`src/lib/server/codes.ts`) is the way in without Google: six digits through Resend, valid 10 minutes, only to addresses in a household. The server keeps no codes; the browser that asked holds a short-lived httpOnly, SameSite=Strict cookie with the address, expiry and an HMAC over those and the code (keyed from the server's secret), so only that browser with the code from the email can finish. The database only counts: 5 codes an hour and 10 a day per address (keyed by a hash, never the address), 5 tries per code, one use; if the counters can't be reached it refuses rather than going uncounted. Every address gets the same answer and about the same delay, so it doesn't reveal who's invited. Personal links still work until `SIGN_IN_LINKS=off`: each is `/k#<token>`, the token sits after the `#` so it never reaches a server or its logs, and `/k` trades it for the same kind of cookie and wipes it from the address bar. Rotating one token signs out only that person; `SESSION_VERSION` signs out everyone. Tokens under 24 characters are refused.
+- **Every write** must come from the app's own pages (`Sec-Fetch-Site`/`Origin` checked) with a JSON body, so another site can't act for a signed-in phone. Role checks: only whoever has the final say approves or reopens; only the creator (or Joel) archives; only Joel sees Setup.
+- **Spend**: every Claude call and every painting holds its worst-case cost against the budgets before it runs, so parallel requests can't overshoot: first its household's own limit, then the site's. The money comes out of the project's household, or for calls outside a project the household you're working in; every API route runs inside a small request context (`src/lib/server/context.ts`) that carries which one, so code far from the route doesn't need it passed in. Other households are told the site's budget is used up without its numbers, and Setup lists only Joel's household's spending notes (`tests/unit/budgets.test.ts`). Each provider also gets its own hard cap (see the checklist in [docs/SETUP.md](docs/SETUP.md#security-checklist-before-going-live)).
+- **Rate limits** (`src/lib/server/limits.ts`): per person, counted in the database so they hold across every server instance. Claude requests (word ideas, Change something, describe-a-project): 30 per 10 minutes, 200 a day. New artwork: 6 per 10 minutes, 30 a day. Printer searches: 5 an hour, 10 a day. Print-file builds: 10 per 10 minutes, 30 a day. New projects: 10 an hour, 30 a day. Going over says how long to wait, and the first time in a window is logged in Activity. Until `0005_activity_and_limits.sql` has been run, nobody is limited (the budget is still the backstop).
+- **Households**: people, households and memberships live in the database (`src/lib/server/people.ts`, `supabase/migrations/0006_households.sql`). Every project belongs to one household (older ones to the first), and every project route starts with `requireMember`, which answers 404 to anyone outside it (`tests/unit/households.test.ts` fails if a route skips it). Home, the sidebar, the archive and the activity log only list the household's own; stored artwork sits in a folder per household and print files are checked through their approval, so a file's address doesn't open it for an outsider either. Sessions name a person; leaving every household signs them out. Joel and Erin keep the ids `joel` and `erin`, so everything recorded before households still reads right.
+- **Invites** (`src/lib/server/invites.ts`, `0007_invites_and_sessions.sql`): the only way in for anyone new. An owner invites into their household, Joel invites someone to start one. A link is `/join#<secret>`: the secret is 32 random bytes after the `#`, so it never reaches a server log, and only its SHA-256 is stored. One use (claimed in a single conditional update, so two people can't both get in), 7 days, cancellable, at most 20 waiting per household, and a rate limit on making them. Opening one holds it for 30 minutes in an httpOnly cookie scoped to `/api/auth`, so Google sign-in and email codes (which then go to an unknown address only while an invite is held) add the person as they arrive; someone signed in joins with one tap. Membership (`src/lib/server/membership.ts`): owners promote, demote (never the last owner) and remove (never Joel); anyone leaves (not the last owner or the only person); the final say on unapproved projects passes on and departed members' hearts stop counting. Roles are per household, and a per-browser cookie says which household you're working in. If a lookup misses (someone who joined a moment ago on another server), the directory is reloaded once, at most every two seconds.
+- **Your account** (`src/lib/server/account.ts`, `src/lib/server/sessions.ts`): change your name, see and sign out signed-in browsers, or close your account. Session cookies (v2) carry a browser id, checked against the list on each request (remembered 30 seconds per server); the list keeps a short device name, never the user agent or IP. "Sign out everywhere else" also sets a cutoff on the person, which ends older v1 cookies.
+- **First visit** (`src/app/page.tsx`, `src/components/HowItWorks.tsx`): a household that's never made anything gets a welcome with its name, "Start your first project" front and centre, one-tap occasions (`/new?occasion=birthday` skips to the details), a nudge to invite someone if the owner's alone, and the four steps of how it works. Someone who joins a household that already has projects gets a compact "New here?" card until they say Got it or start a project (`welcomedAt` on the person; Joel and Erin never see it). The steps are also at `/how-it-works`, linked from the sidebar and the phone home screen. Nothing in the code is about any particular household's project: rules come from each project's own record (who decides, whether it's kept for good, its backstory and art ideas), and the 3D try-on's two mannequins are called Fitted and Regular (`tests/unit/firstvisit.test.ts`).
+- **Nothing is deleted unless someone means it**: leaving or being taken out marks the membership ended (owners see past members and invite them back, hearts and all). Closing your account, or Joel switching one off, archives the person (signed out, out of every household, can't sign in, everything kept); an invite revives a self-closed account, a restore revives either into the households it left. Erasing (`erase` in account.ts) is the only hard delete: Joel's **Erase now** on an archived account or **Erase** on a household nobody's in (both with the name typed), or a self-requested erase 30 days after closing, run by the nightly cron after the backup and stoppable from Setup → People. It removes the person, their reactions, sign-in/consent/limit log entries and devices, and any household nobody else could come back to (with projects, files, printers and invites); what they made with others stays (`tests/unit/members.test.ts`).
+- **Activity log**: approvals, reopens, archives, restores, renames, deletes, design archives, new projects, sign-ins and rate-limit hits, with who and when. Writing to it never blocks the action itself.
+- **Prompts**: project details (names, places, the sentence someone typed to start a project) go to Claude in the message, wrapped in `<project>` tags and marked as background facts, never in its instructions. So nothing typed into a project can steer Claude, and the instructions are identical for every project.
+- **Headers**: a per-request nonce CSP (`src/proxy.ts`, `src/lib/server/csp.ts`), HSTS (HTTPS only, two years, no preload), no framing, `nosniff`, a strict referrer policy, `noindex`. Stored files served by the app get their own locked-down CSP.
+- **Input**: designs are normalized on save and again on render (`src/lib/design/safe.ts`), so one odd value can't break a page. Claude's SVG goes through an allow-list sanitiser; the print renderer refuses any SVG that links to an outside file. fal is asked to hand artwork back inline (`sync_mode`), so it isn't kept at a public link or in fal's request history; a model that ignores that still only downloads from fal's own hosts.
+- **Storage**: Supabase tables have row level security with no public policies, and the public roles have no table rights at all; the file bucket is private and downloads use 5-minute signed links. Keys never leave the server (`server-only` on the modules that hold them).
+- **Public pages**: the welcome page (what Our Studio is, and sign-in), `/privacy` and `/terms` open without signing in; Google's brand verification reads them. The privacy page describes exactly what's kept and who handles it, so keep it in step with the code.
+- **Printer links** are the other deliberately public thing: `/s/<id>.<secret>` with a 192-bit random secret, of which only a hash is stored. They show one order's details and files, work for 14 days, and stop at once when turned off or when the design is reopened. The secret is in the path, so it will appear in Vercel's request logs.
+- **What leaves for the AI providers**: names, places and dates in prompts to Anthropic, and art prompts to fal.ai or OpenAI (fal returns the pictures inline rather than hosting them). No booking references or payment details are ever in the app.
+
+## Adding another kind of decision
+
+The storage and voting are kind-agnostic: a project has a `kind` and a `brief`, options carry a `payload`, reactions and decisions don't care what's inside. A new kind (say `trip-pick` for "where to in 2028?") needs its brief/payload types in `src/lib/kinds/`, a generator, a card renderer, and a `finalize` step that produces its deliverable. The shirt is the worked example.
+
+## Still to come
+
+- AI artwork and sleeve prints for backs
+- Surprise projects hidden from the other person (left out for now: everything is shared)
+- The second kind of decision: where to in 2028
