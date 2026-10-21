@@ -18,6 +18,7 @@ import { loadAllFonts } from '@/lib/server/fonts';
 import { ensureSeed, projectState, SEED_PROJECT_ID } from '@/lib/server/studio';
 import { editOption, tweakOption } from '@/lib/server/tweaks';
 import '@/lib/server/ai';
+import { paintForTweak } from '@/lib/server/art';
 import { ask, ClaudeFailed, z } from '@/lib/server/llm/claude';
 import { suggestCopy, writeArtConcepts } from '@/lib/server/llm/tasks';
 
@@ -380,5 +381,59 @@ describe('a slow Claude', () => {
     expect(entry.trouble).toMatchObject({ transient: true });
     // The hold was about 32 cents (16,000 tokens of answer); 0.3 s of writing is well under one.
     expect(entry.usd).toBeLessThan(0.01);
+  });
+});
+
+describe('artwork when a service is down', () => {
+  /** fal answers with `status`; Claude (the stand-in) draws. */
+  async function withFal<T>(status: number, run: () => Promise<T>): Promise<T> {
+    const keep = { provider: process.env.IMAGE_PROVIDER, key: process.env.FAL_KEY };
+    process.env.IMAGE_PROVIDER = 'fal';
+    process.env.FAL_KEY = 'fal-test-not-real';
+    const realFetch = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.startsWith('https://fal.run/')) return new Response('{"detail":"Not now"}', { status });
+      return realFetch(input, init);
+    });
+    try {
+      return await run();
+    } finally {
+      vi.restoreAllMocks();
+      for (const [k, v] of [['IMAGE_PROVIDER', keep.provider], ['FAL_KEY', keep.key]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  }
+  const drawing = { svg: '<svg viewBox="0 0 1000 1000"><circle cx="500" cy="500" r="200" fill="#F2654E"/></svg>' };
+
+  it('tries the next service with a key, and charges each for its own attempt', async () => {
+    const { repo } = tempRepo();
+    await ensureSeed();
+    answer = drawing;
+    const art = await withFal(503, () => paintForTweak(SEED_PROJECT_ID, 'a golden retriever', 'lagoon', [], undefined, Date.now() + 120_000));
+    expect(art).toMatchObject({ kind: 'svg' });
+    const spend = await repo.listSpendSince('2000-01-01');
+    // fal was busy, so its hold stays (it may have been billed); Claude's drawing is recorded on its own.
+    expect(spend.find((r) => r.provider === 'fal')).toMatchObject({ usd: 0.06, note: 'artwork: a golden retriever', trouble: { transient: true } });
+    expect(spend.find((r) => r.note === 'vector art')).toMatchObject({ provider: 'anthropic' });
+    expect(spend.every((r) => typeof r.ms === 'number')).toBe(true);
+  });
+
+  it('falls back when the key is refused too, without charging for the refusal', async () => {
+    const { repo } = tempRepo();
+    await ensureSeed();
+    answer = drawing;
+    await withFal(401, () => paintForTweak(SEED_PROJECT_ID, 'a manta ray', 'lagoon', [], undefined, Date.now() + 120_000));
+    expect((await repo.listSpendSince('2000-01-01')).find((r) => r.provider === 'fal')).toMatchObject({ usd: 0, trouble: { transient: false } });
+  });
+
+  it('doesn’t start another service with no time left for it', async () => {
+    const { repo } = tempRepo();
+    await ensureSeed();
+    answer = drawing;
+    await expect(withFal(503, () => paintForTweak(SEED_PROJECT_ID, 'a kite', 'lagoon', [], undefined, Date.now() + 10_000))).rejects.toThrow(/fal\.ai/);
+    expect((await repo.listSpendSince('2000-01-01')).some((r) => r.note === 'vector art')).toBe(false);
   });
 });

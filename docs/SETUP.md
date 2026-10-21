@@ -45,6 +45,8 @@ Leave **Project Settings → Data API → Max rows** at 1000 (the default) or mo
 
 Prefer OpenAI instead? Set `OPENAI_API_KEY` and skip fal.ai. Artwork quality is similar; print upscaling falls back to plain resampling, which is fine at most sizes.
 
+With more than one key set, the others step in when the first service fails: fal.ai, then OpenAI, then Claude drawing vector art (it uses `ANTHROPIC_API_KEY`, so it's always there as a last resort). Each attempt is charged to the service that ran it, and Setup still shows the one that's failing.
+
 ## 4. Vercel (hosting)
 
 1. Go to [vercel.com](https://vercel.com) and sign up with GitHub.

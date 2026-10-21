@@ -131,7 +131,7 @@ const SUBSTITUTES: Record<string, string> = {
 };
 
 /** Glyphs that read badly in a given face and borrow from another font. */
-const GLYPH_OVERRIDES: Record<string, Record<string, string>> = {
+export const GLYPH_OVERRIDES: Record<string, Record<string, string>> = {
   righteous: { '&': 'montserrat-bold' },
 };
 

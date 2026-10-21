@@ -1,7 +1,7 @@
 // fal.ai: one key for image models, upscaling and background removal.
 import sharp from 'sharp';
 import { config } from '../config';
-import { PRINT_RULES, type ArtRequest, type ArtResult, type ImageProvider } from './types';
+import { PRINT_RULES, timeLeft, type ArtRequest, type ArtResult, type ImageProvider } from './types';
 
 interface FalImage {
   url: string;
@@ -49,7 +49,7 @@ async function falRun<T>(model: string, input: Record<string, unknown>, timeoutM
 const FAL_HOST = /(^|\.)(fal\.media|fal\.run|fal\.ai)$/i;
 const MAX_IMAGE_BYTES = 40 * 1024 * 1024;
 
-export async function download(url: string): Promise<Buffer> {
+export async function download(url: string, timeoutMs = 120_000): Promise<Buffer> {
   if (url.startsWith('data:image/')) {
     const comma = url.indexOf(',');
     if (comma < 0 || !url.slice(0, comma).endsWith(';base64')) throw new Error('fal.ai sent back a broken image.');
@@ -58,7 +58,7 @@ export async function download(url: string): Promise<Buffer> {
     if (buf.length > MAX_IMAGE_BYTES) throw new Error('fal.ai sent an image that was too big.');
     return buf;
   }
-  const signal = AbortSignal.timeout(120_000);
+  const signal = AbortSignal.timeout(timeoutMs);
   let res: Response | undefined;
   // Redirects are followed by hand, and only to fal's own hosts.
   for (let hops = 0; hops < 4 && !res; hops++) {
@@ -125,11 +125,11 @@ export const falProvider: ImageProvider = {
     const input: Record<string, unknown> = isGptImage
       ? { prompt: `${req.prompt}\n\n${PRINT_RULES}`, image_size: '1024x1536', background: 'transparent', quality: config.imageQuality, output_format: 'png', num_images: 1 }
       : { prompt: `${req.prompt}. ${PRINT_RULES}`, image_size: 'portrait_4_3', num_images: 1 };
-    const out = await falRun<{ images: FalImage[] }>(model, input);
+    const out = await falRun<{ images: FalImage[] }>(model, input, timeLeft(req, 240_000));
     const first = out.images?.[0];
     if (!first?.url) throw new Error('fal.ai returned no image.');
-    let png: Buffer = await sharp(await download(first.url)).png().toBuffer();
-    if (!isGptImage) png = await this.removeBackground!(png);
+    let png: Buffer = await sharp(await download(first.url, timeLeft(req, 120_000))).png().toBuffer();
+    if (!isGptImage) png = await this.removeBackground!(png, timeLeft(req, 240_000));
     return { data: png, type: 'png', usd: costOf() };
   },
 
@@ -145,9 +145,9 @@ export const falProvider: ImageProvider = {
     return sharp(big).removeAlpha().joinChannel(alpha).png().toBuffer();
   },
 
-  async removeBackground(png: Buffer): Promise<Buffer> {
-    const out = await falRun<{ image: FalImage }>(config.falBackgroundModel, { image_url: asDataUri(png) });
-    return sharp(await download(out.image.url)).png().toBuffer();
+  async removeBackground(png: Buffer, timeoutMs = 240_000): Promise<Buffer> {
+    const out = await falRun<{ image: FalImage }>(config.falBackgroundModel, { image_url: asDataUri(png) }, timeoutMs);
+    return sharp(await download(out.image.url, Math.min(timeoutMs, 120_000))).png().toBuffer();
   },
 
   async ping() {

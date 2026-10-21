@@ -1,7 +1,7 @@
 // Wires Claude into the tweak flow when a key is present. Imported by the
 // routes that need it; keyword matching remains the fallback.
 import { vibe } from '@/lib/design/vibes';
-import { paintForTweak } from './art';
+import { PAINT_BUDGET_MS, paintForTweak } from './art';
 import { HttpError } from './auth';
 import { config } from './config';
 import { rateLimit } from './limits';
@@ -12,6 +12,8 @@ import { motifsFor } from '@/lib/design/occasions';
 
 setTweakInterpreter(async (base, request, ctx) => {
   if (!config.anthropicKey) return null;
+  // Counted from the start of the tweak, so Claude's turn and the painting together fit the route's time.
+  const deadline = Date.now() + PAINT_BUDGET_MS;
   const result = await interpretTweak(base, request, ctx.copy ?? { headline: '', tagline: '', extra: '' }, config.imageProvider !== 'mock', ctx.about, ctx.shirt);
   if (!result) return null;
   if (result.newArtwork && ctx.projectId) {
@@ -20,7 +22,7 @@ setTweakInterpreter(async (base, request, ctx) => {
       if (ctx.user) await rateLimit(ctx.user, 'art');
       const project = await getShirtProject(ctx.projectId);
       const styles = project.brief.vibes.map((v) => vibe(v)?.artStyle).filter((s): s is string => !!s);
-      const art = await paintForTweak(ctx.projectId, result.newArtwork, result.design.palette, styles, motifsFor(occasionsOf(project)));
+      const art = await paintForTweak(ctx.projectId, result.newArtwork, result.design.palette, styles, motifsFor(occasionsOf(project)), deadline);
       if (art) {
         result.design.art = art;
         if (result.design.layout === 'ticket' || result.design.layout === 'bigtype') result.design.layout = 'stack';

@@ -53,14 +53,58 @@ function outcomes(rows: SpendEntry[]): Map<string, SpendEntry[]> {
   return out;
 }
 
+/** The last 30 days' calls, newest first: the newest are what matter, and a month can hold more than one read returns. */
+export function recentCalls(): Promise<SpendEntry[]> {
+  return getRepo().listSpendSince(new Date(Date.now() - 30 * 86_400_000).toISOString(), { newest: 1000 });
+}
+
+export interface CallTiming {
+  label: string;
+  count: number;
+  typicalMs: number;
+  slowestMs: number;
+  /** How long it should usually take, where there's a figure to aim for. */
+  targetMs: number | null;
+}
+
+/** Kinds of call, by how their spending note starts, with what each should usually take. */
+const KINDS: [match: RegExp, label: string, targetMs: number | null][] = [
+  [/^design tweak\b/, 'Change something (reading the request)', 20_000],
+  [/^word ideas\b/, 'Word ideas', 25_000],
+  [/^artwork:/, 'A painting', 90_000],
+  [/^printer search\b/, 'Printer search', 180_000],
+  [/^new project draft\b/, 'A project from one sentence', null],
+  [/^art direction\b/, 'Art direction', null],
+  [/^art check\b/, 'Checking artwork for lettering', null],
+  [/^vector art\b/, 'Vector artwork (Claude)', null],
+  [/^print upscale\b/, 'Print upscale', null],
+];
+
+/**
+ * How long each kind of AI call has been taking: typical (the median) and
+ * slowest, from calls that finished. Calls from before timings were kept, or
+ * still running, aren't counted.
+ */
+export function aiTimings(rows: SpendEntry[]): CallTiming[] {
+  const out: CallTiming[] = [];
+  for (const [match, label, targetMs] of KINDS) {
+    const ms = rows
+      .filter((r) => typeof r.ms === 'number' && match.test(r.note) && !r.note.endsWith('(in progress)'))
+      .map((r) => r.ms!)
+      .sort((a, b) => a - b);
+    if (!ms.length) continue;
+    out.push({ label, count: ms.length, typicalMs: ms[Math.floor((ms.length - 1) / 2)], slowestMs: ms[ms.length - 1], targetMs });
+  }
+  return out;
+}
+
 /**
  * Services whose latest call failed for a reason that won't fix itself (a bad
  * key, an unknown model), or that failed three times running. One busy moment
  * at the provider isn't worth a warning; the next call that works clears it.
  */
-export async function aiTrouble(): Promise<ServiceTrouble[]> {
-  // The newest calls are what matter here; a month can hold more than one read returns.
-  const rows = await getRepo().listSpendSince(new Date(Date.now() - 30 * 86_400_000).toISOString(), { newest: 1000 });
+export async function aiTrouble(recent?: SpendEntry[]): Promise<ServiceTrouble[]> {
+  const rows = recent ?? (await recentCalls());
   const found: ServiceTrouble[] = [];
   for (const [provider, calls] of outcomes(rows)) {
     const [latest] = calls;

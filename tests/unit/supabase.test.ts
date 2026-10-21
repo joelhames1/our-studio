@@ -8,13 +8,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { DatabaseUnreachable, getRepo, setRepo, SetupNeeded } from '@/lib/server/repo';
 import { supabaseConfigProblem, SupabaseRepo } from '@/lib/server/repo/supabase';
 
-type Mode = 'ok' | 'missing' | 'denied' | 'badkey' | 'noprinters' | 'hang' | 'gateway' | 'nofile';
+type Mode = 'ok' | 'missing' | 'denied' | 'badkey' | 'noprinters' | 'hang' | 'gateway' | 'nofile' | 'many';
 let mode: Mode = 'ok';
 const paths: string[] = [];
 let server: http.Server;
 let base = '';
 
-const REPLIES: Record<Exclude<Mode, 'ok' | 'noprinters' | 'hang' | 'gateway' | 'nofile'>, [number, object]> = {
+const REPLIES: Record<Exclude<Mode, 'ok' | 'noprinters' | 'hang' | 'gateway' | 'nofile' | 'many'>, [number, object]> = {
   missing: [404, { code: 'PGRST205', details: null, hint: null, message: "Could not find the table 'public.projects' in the schema cache" }],
   denied: [403, { code: '42501', details: null, hint: null, message: 'permission denied for table projects' }],
   badkey: [401, { message: 'Invalid API key', hint: 'Double check your Supabase `anon` or `service_role` API key.' }],
@@ -31,11 +31,19 @@ beforeAll(async () => {
       return res.end('<html><body>503 Service Unavailable</body></html>');
     }
     res.setHeader('Content-Type', 'application/json');
+    // A project with more hearts than one read returns: answers a page at a time, as Supabase does.
+    if (mode === 'many' && req.url?.startsWith('/rest/v1/reactions')) {
+      const q = new URL(req.url, 'http://x').searchParams;
+      const from = Number(q.get('offset') ?? 0);
+      const count = Math.min(Number(q.get('limit') ?? 1000), 1000);
+      const all = Array.from({ length: 1234 }, (_, i) => ({ data: { optionId: `o${i}`, userId: 'joel', projectId: 'p', value: 'love' } }));
+      return res.end(JSON.stringify(all.slice(from, from + count)));
+    }
     if (mode === 'nofile' && req.url?.startsWith('/storage/v1/object/')) {
       res.statusCode = 400;
       return res.end(JSON.stringify({ statusCode: '404', error: 'not_found', message: 'Object not found' }));
     }
-    if (mode === 'ok' || mode === 'nofile' || (mode === 'noprinters' && !req.url?.startsWith('/rest/v1/printers'))) return res.end('[]');
+    if (mode === 'ok' || mode === 'nofile' || mode === 'many' || (mode === 'noprinters' && !req.url?.startsWith('/rest/v1/printers'))) return res.end('[]');
     const [status, body] = REPLIES[mode === 'noprinters' ? 'missing' : mode];
     res.statusCode = status;
     res.end(JSON.stringify(body));
@@ -105,6 +113,28 @@ describe('Supabase having a bad day', () => {
     // Files get their own, longer deadline, and still give up.
     const file = await repo.getAsset('a/b.png').catch((e) => e);
     expect(file).toBeInstanceOf(DatabaseUnreachable);
+  });
+
+  it('asks storage about its bucket once, on the short deadline', async () => {
+    const repo = new SupabaseRepo(base, 'sb_secret_test', { data: 300, files: 5000 });
+    mode = 'hang';
+    paths.length = 0;
+    const started = Date.now();
+    await expect(repo.getAsset('a/b.png')).rejects.toBeInstanceOf(DatabaseUnreachable);
+    expect(Date.now() - started).toBeLessThan(2000);
+    // Storage that didn't answer isn't asked to make the bucket as well.
+    expect(paths).toEqual(['/storage/v1/bucket/studio']);
+  });
+
+  it('reads every heart on a project, however many there are', async () => {
+    const repo = new SupabaseRepo(base, 'sb_secret_test');
+    mode = 'many';
+    paths.length = 0;
+    const hearts = await repo.listReactions('p');
+    expect(hearts).toHaveLength(1234);
+    expect(new Set(hearts.map((h) => h.optionId)).size).toBe(1234);
+    expect(paths).toHaveLength(2);
+    expect(paths[0]).toMatch(/order=option_id\.asc%2Cuser_id\.asc|order=option_id\.asc,user_id\.asc/);
   });
 
   it('treats a gateway page as an outage, not a setup mistake', async () => {

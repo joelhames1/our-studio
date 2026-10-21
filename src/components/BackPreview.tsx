@@ -2,13 +2,16 @@
 import { memo, useId, useMemo } from 'react';
 import { backWidthIn, renderBack, type FrontStyle } from '@/lib/design/back/render';
 import type { BackDesign, Facts } from '@/lib/design/back/types';
+import { backFonts } from '@/lib/design/fontsFor';
 import { printRect, renderMockup } from '@/lib/design/garments';
 import { garmentColor } from '@/lib/design/palettes';
 import type { Copy, GarmentStyle } from '@/lib/design/types';
 import { CANVAS } from '@/lib/design/types';
 import { useFonts } from '@/lib/client/fonts';
+import { previewHref } from '@/lib/design/preview';
 
-const assetHref = (key: string) => `/api/assets/${key}`;
+// Screen-size copies of painted artwork; print uses the originals.
+const assetHref = previewHref;
 
 interface Props {
   back: BackDesign;
@@ -27,7 +30,7 @@ interface Props {
 
 /** A back design on the back of the shirt, rendered exactly as it will print. */
 export const BackPreview = memo(function BackPreview({ back, facts, front, copy, style, color, view = 'chest', wearer, className = '', label }: Props) {
-  const fonts = useFonts();
+  const fonts = useFonts(useMemo(() => backFonts(back, front), [back, front]));
   const rid = useId();
   const shirt = garmentColor(color);
   const widthIn = backWidthIn(back.size, style);

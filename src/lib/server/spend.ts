@@ -101,11 +101,13 @@ export async function reserveSpend(provider: string, model: string, estimateUsd:
     throw refusal;
   }
   let settled = false;
+  // From here the call itself is running; the checks above aren't part of how long it took.
+  const started = Date.now();
   return async (actualUsd, trouble) => {
     if (settled) return;
     settled = true;
     try {
-      await repo.updateSpend({ ...hold, usd: round(actualUsd), note, ...(trouble ? { trouble } : {}) });
+      await repo.updateSpend({ ...hold, usd: round(actualUsd), note, ms: Date.now() - started, ...(trouble ? { trouble } : {}) });
     } catch (e) {
       console.error('Could not record spend', e);
     }

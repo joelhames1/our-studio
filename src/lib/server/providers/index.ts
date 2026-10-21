@@ -8,7 +8,7 @@ import { drawSvg } from '../llm/tasks';
 import { falProvider } from './fal';
 import { openaiProvider } from './openai';
 import { sanitizeSvg } from './svg';
-import type { ArtRequest, ImageProvider } from './types';
+import { timeLeft, type ArtRequest, type ImageProvider } from './types';
 
 /** Claude draws vector art: no extra account, razor sharp, simpler look. */
 const claudeSvgProvider: ImageProvider = {
@@ -20,7 +20,7 @@ const claudeSvgProvider: ImageProvider = {
   // drawSvg's Claude call holds and records its own cost.
   estimateUsd: 0,
   async generate(req: ArtRequest) {
-    const svg = sanitizeSvg(await drawSvg(req.subject ?? req.prompt, req.styles ?? [], req.colors ?? ['#12355B', '#F2654E', '#FFD166', '#3CC8C8']));
+    const svg = sanitizeSvg(await drawSvg(req.subject ?? req.prompt, req.styles ?? [], req.colors ?? ['#12355B', '#F2654E', '#FFD166', '#3CC8C8'], timeLeft(req, 150_000)));
     return { data: Buffer.from(svg), type: 'svg', usd: 0 };
   },
   async ping() {
@@ -63,6 +63,23 @@ export function getImageProvider(): ImageProvider {
     default:
       return mockProvider;
   }
+}
+
+/**
+ * The services to try for one painting, in order: the chosen one, then any
+ * other with a key (fal.ai, OpenAI, Claude's vector art), so one service
+ * being down doesn't mean no new artwork. The practice artist never hands
+ * over to a paid one.
+ */
+export function imageProviders(): ImageProvider[] {
+  const first = getImageProvider();
+  if (first.id === 'mock') return [first];
+  const others: [boolean, ImageProvider][] = [
+    [!!config.falKey, falProvider],
+    [!!config.openaiKey, openaiProvider],
+    [!!config.anthropicKey, claudeSvgProvider],
+  ];
+  return [first, ...others.filter(([has, p]) => has && p.id !== first.id).map(([, p]) => p)];
 }
 
 export type { ImageProvider };

@@ -3,6 +3,7 @@
 // design can be archived for everyone and restored later. Nothing archived loses
 // its hearts or approvals; only "delete for good" removes anything.
 import type { OptionRecord, User } from '@/lib/engine/types';
+import { previewKey } from '@/lib/design/preview';
 import { BACK, type ShirtSnapshot } from '@/lib/kinds/shirt';
 import { record } from './activity';
 import { HttpError } from './auth';
@@ -62,11 +63,11 @@ export async function renameProject(user: User, id: string, title: unknown): Pro
   return project;
 }
 
-/** Stored files a design draws on: painted artwork, and the print-size copy made at approval. */
+/** Stored files a design draws on: painted artwork, its screen-size copy, and the print-size copy made at approval. */
 function artKeys(o: OptionRecord): string[] {
   const art = (o.payload as { art?: { kind?: string; assetKey?: unknown } } | null)?.art;
   if (!art || (art.kind !== 'image' && art.kind !== 'svg') || typeof art.assetKey !== 'string') return [];
-  return [art.assetKey, art.assetKey.replace(/\.(png|jpe?g|webp)$/i, '') + '@print.png'];
+  return [...new Set([art.assetKey, previewKey(art.assetKey), art.assetKey.replace(/\.(png|jpe?g|webp)$/i, '') + '@print.png'])];
 }
 
 /**

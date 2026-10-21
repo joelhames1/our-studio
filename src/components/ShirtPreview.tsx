@@ -3,12 +3,15 @@ import { memo, useId, useMemo, type MouseEvent } from 'react';
 import { partFromProbe, PROBE_COLORS } from '@/lib/design/colors';
 import { renderMockup, type Placement } from '@/lib/design/garments';
 import { garmentColor } from '@/lib/design/palettes';
+import { frontFonts } from '@/lib/design/fontsFor';
 import { renderDesign } from '@/lib/design/render';
 import type { ColorPart, Copy, GarmentSide, GarmentStyle, ShirtDesign } from '@/lib/design/types';
 import { CANVAS } from '@/lib/design/types';
 import { useFonts } from '@/lib/client/fonts';
+import { previewHref } from '@/lib/design/preview';
 
-const assetHref = (key: string) => `/api/assets/${key}`;
+// Screen-size copies of painted artwork; print uses the originals.
+const assetHref = previewHref;
 
 interface Props {
   design: ShirtDesign;
@@ -39,7 +42,7 @@ export const ShirtPreview = memo(function ShirtPreview({
   label,
   onPickPart,
 }: Props) {
-  const fonts = useFonts();
+  const fonts = useFonts(useMemo(() => frontFonts(design.pairing), [design.pairing]));
   const rid = useId();
   const shirt = garmentColor(color);
   const width = printWidthIn ?? (style === 'hoodie' ? 10 : 12);

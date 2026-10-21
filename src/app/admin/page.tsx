@@ -401,6 +401,28 @@ export default async function AdminPage() {
             </ul>
           ) : null}
         </Row>
+
+        <Row ok={s.timings.every((t) => t.targetMs === null || t.typicalMs <= t.targetMs) ? true : 'warn'} title="How long AI calls take">
+          {s.timings.length ? (
+            <>
+              <p>The last 30 days, from calls that finished: typical (half are quicker) and the slowest.</p>
+              <ul className="divide-y divide-line/70 text-sm">
+                {s.timings.map((t) => (
+                  <li key={t.label} className="flex flex-wrap justify-between gap-x-3 py-1.5">
+                    <span className="text-muted">
+                      {t.label} <span className="text-xs">({t.count})</span>
+                    </span>
+                    <span className={`tabular-nums ${t.targetMs !== null && t.typicalMs > t.targetMs ? 'text-coral' : ''}`}>
+                      {seconds(t.typicalMs)} typical · {seconds(t.slowestMs)} slowest{t.targetMs !== null ? ` · aim ${seconds(t.targetMs)}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p>Nothing timed yet: each AI call is timed from now on, and the figures show up here.</p>
+          )}
+        </Row>
       </div>
 
       <form action="/api/logout" method="post" className="mt-10 text-center">
@@ -408,4 +430,12 @@ export default async function AdminPage() {
       </form>
     </main>
   );
+}
+
+/** "4.2 s", "1 min 30 s". */
+function seconds(ms: number): string {
+  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
+  const m = Math.floor(ms / 60_000);
+  const sec = Math.round((ms % 60_000) / 1000);
+  return sec ? `${m} min ${sec} s` : `${m} min`;
 }

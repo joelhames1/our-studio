@@ -99,7 +99,9 @@ const missingFile = (e: { message?: string; status?: number; statusCode?: string
 function withDeadlines(deadlines: typeof DEADLINES): typeof fetch {
   return (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
-    const deadline = AbortSignal.timeout(url.includes('/storage/v1/') ? deadlines.files : deadlines.data);
+    // Moving a file's bytes gets the long deadline; asking about the bucket is as quick as any other question.
+    const file = url.includes('/storage/v1/') && !url.includes('/storage/v1/bucket');
+    const deadline = AbortSignal.timeout(file ? deadlines.files : deadlines.data);
     return fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline });
   };
 }
@@ -216,9 +218,10 @@ export class SupabaseRepo implements Repo {
   }
 
   async listReactions(projectId: string) {
-    const { data, error } = await this.sb.from('reactions').select('data').eq('project_id', projectId).limit(10000);
-    if (error) this.fail('read reactions', error);
-    return (data ?? []).map((r) => r.data as Reaction);
+    // A page at a time, in key order: four people hearting 250 designs is already past one read.
+    return (await this.paged<Reaction>('read reactions', (from, to) =>
+      this.sb.from('reactions').select('data').eq('project_id', projectId).order('option_id', { ascending: true }).order('user_id', { ascending: true }).range(from, to),
+    ))!;
   }
   async saveReaction(r: Reaction) {
     const { error } = await this.sb
@@ -243,10 +246,8 @@ export class SupabaseRepo implements Repo {
     if (error) this.fail('save decision', error);
   }
 
-  async listDecisions(projectId: string) {
-    const { data, error } = await this.sb.from('decisions').select('data').eq('project_id', projectId).limit(1000);
-    if (error) this.fail('read decisions', error);
-    return (data ?? []).map((r) => r.data as Decision);
+  listDecisions(projectId: string) {
+    return this.rows<Decision>('decisions', 'project_id', projectId);
   }
 
   async deleteProject(id: string) {
@@ -355,13 +356,8 @@ export class SupabaseRepo implements Repo {
     if (error) this.fail('delete membership', error);
   }
 
-  async listInvites(): Promise<Invite[] | null> {
-    const { data, error } = await this.sb.from('invites').select('data').order('created_at', { ascending: false }).limit(1000);
-    if (error) {
-      if (notThereYet(error)) return null;
-      this.fail('read invites', error);
-    }
-    return (data ?? []).map((r) => r.data as Invite);
+  listInvites(): Promise<Invite[] | null> {
+    return this.paged<Invite>('read invites', (from, to) => this.sb.from('invites').select('data').order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to), 'ok');
   }
   async getInvite(id: string) {
     const { data, error } = await this.sb.from('invites').select('data').eq('id', id).maybeSingle();
@@ -468,8 +464,10 @@ export class SupabaseRepo implements Repo {
   private ensureBucket(): Promise<void> {
     if (!this.bucketReady) {
       this.bucketReady = (async () => {
-        const { data } = await this.sb.storage.getBucket(BUCKET);
+        const { data, error: lookup } = await this.sb.storage.getBucket(BUCKET);
         if (data) return;
+        // Only a bucket that isn't there gets made: storage that didn't answer says so instead of being asked twice.
+        if (lookup && !missingFile(lookup)) this.fail('check the storage bucket', lookup);
         const { error } = await this.sb.storage.createBucket(BUCKET, { public: false });
         if (error && !/already exists/i.test(error.message)) this.fail('create storage bucket', error);
       })();

@@ -1,14 +1,14 @@
 // OpenAI GPT Image: good prompt-following and native transparent backgrounds.
 // No AI upscaler here; print export falls back to high-quality resampling.
 import { config } from '../config';
-import { PRINT_RULES, type ArtRequest, type ArtResult, type ImageProvider } from './types';
+import { PRINT_RULES, timeLeft, type ArtRequest, type ArtResult, type ImageProvider } from './types';
 
-async function openai<T>(path: string, body?: Record<string, unknown>): Promise<T> {
+async function openai<T>(path: string, body?: Record<string, unknown>, timeoutMs = 240_000): Promise<T> {
   const res = await fetch(`https://api.openai.com/v1/${path}`, {
     method: body ? 'POST' : 'GET',
     headers: { Authorization: `Bearer ${config.openaiKey}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(240_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) {
     const text = (await res.text()).slice(0, 300);
@@ -36,7 +36,7 @@ export const openaiProvider: ImageProvider = {
       background: 'transparent',
       quality: config.imageQuality,
       output_format: 'png',
-    });
+    }, timeLeft(req, 240_000));
     const b64 = out.data?.[0]?.b64_json;
     if (!b64) throw new Error('OpenAI returned no image.');
     return { data: Buffer.from(b64, 'base64'), type: 'png', usd: config.costPerImageUsd };

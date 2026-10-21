@@ -263,12 +263,14 @@ export async function checkArt(png: Buffer): Promise<{ hasLettering: boolean; pr
 
 const SvgSchema = z.object({ svg: z.string().describe('A complete <svg> element') });
 
-export async function drawSvg(subject: string, styles: string[], colors: string[]): Promise<string> {
+export async function drawSvg(subject: string, styles: string[], colors: string[], deadlineMs = 150_000): Promise<string> {
   const out = await ask(SvgSchema, {
     note: 'vector art',
-    deadlineMs: 200_000,
-    effort: 'high',
-    maxTokens: 32000,
+    // Whatever time the request has left, since this can be the fallback after another service failed. A 15 KB
+    // drawing is about 5,000 tokens, so this is room enough without the long tail of a high-effort answer.
+    deadlineMs,
+    effort: 'medium',
+    maxTokens: 12000,
     system: `You are an illustrator drawing clean vector artwork for a T-shirt print.
 Rules: one <svg> with viewBox="0 0 1000 1000"; only path, circle, ellipse, rect, polygon, polyline, line and g elements; solid fills and strokes using only these colors: ${colors.join(', ')}; no text, no gradients, no filters, no opacity, no images, no scripts. Keep it bold and simple enough to read small, centered in the frame, under about 15 KB.`,
     content: `Draw: ${subject}. Style: ${styles.join(' / ') || 'flat, bold screen-print illustration'}.`,

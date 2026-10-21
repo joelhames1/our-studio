@@ -9,7 +9,7 @@ import { openInvites } from './invites';
 import { sendTestAlert } from './alerts';
 import { backUp, backupIsStale, lastBackup, type BackupSummary } from './backup';
 import { getRepo, SetupNeeded } from './repo';
-import { aiTrouble, imageTrouble, type ServiceTrouble } from './health';
+import { aiTimings, aiTrouble, imageTrouble, recentCalls, type CallTiming, type ServiceTrouble } from './health';
 import { getImageProvider } from './providers';
 import { DEFAULT_HOUSEHOLD_BUDGET_USD, householdBudget, householdOfSpend, monthStart, recordOutcome, spentByHousehold, spentThisMonth } from './spend';
 import { ask, z } from './llm/claude';
@@ -61,6 +61,8 @@ export interface SetupStatus {
   };
   /** AI services whose recent calls are failing. */
   trouble: ServiceTrouble[];
+  /** How long each kind of AI call has been taking. */
+  timings: CallTiming[];
   sql: string;
   isVercel: boolean;
 }
@@ -71,6 +73,7 @@ export async function setupStatus(origin: string): Promise<SetupStatus> {
   let spent = 0;
   let byHousehold = new Map<string, number>();
   let trouble: ServiceTrouble[] = [];
+  let timings: CallTiming[] = [];
   try {
     const repo = getRepo();
     const check = await repo.check();
@@ -81,7 +84,9 @@ export async function setupStatus(origin: string): Promise<SetupStatus> {
       recent = (await repo.listSpendSince(monthStart(), { newest: 500 }))
         .filter((r) => r.usd > 0 && householdOfSpend(r) === ADMIN.household)
         .slice(0, 12);
-      trouble = await aiTrouble();
+      const calls = await recentCalls();
+      trouble = await aiTrouble(calls);
+      timings = aiTimings(calls);
     }
   } catch (e) {
     storage = { kind: 'missing', ok: false, message: e instanceof SetupNeeded ? e.message : (e as Error).message };
@@ -138,6 +143,7 @@ export async function setupStatus(origin: string): Promise<SetupStatus> {
     art: { provider: provider.id, label: provider.label, model: provider.model, practice: provider.id === 'mock' },
     budget: { spent, limit: config.monthlyBudgetUsd, recent, newHouseholds: DEFAULT_HOUSEHOLD_BUDGET_USD, ...(await budgetsStatus(byHousehold)) },
     trouble,
+    timings,
     sql,
     isVercel: config.isVercel,
   };

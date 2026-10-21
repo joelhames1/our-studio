@@ -248,4 +248,6 @@ export interface SpendEntry {
   householdId?: HouseholdId;
   /** Why the call failed, if it did. Transient problems (busy, timed out) usually fix themselves. */
   trouble?: { message: string; transient: boolean };
+  /** How long the call took, in milliseconds, for Setup's timings. */
+  ms?: number;
 }

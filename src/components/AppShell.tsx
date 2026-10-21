@@ -75,7 +75,7 @@ function Sidebar({ me, path }: { me: User; path: string }) {
   const item = 'flex items-center gap-3 rounded-2xl px-2.5 py-2 text-[15px] transition hover:bg-white/70';
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-line/70 bg-sand-2/50 px-3 pb-4 pt-5 lg:flex">
-      <Link href="/" className="flex items-center gap-2.5 px-2.5">
+      <Link prefetch={false} href="/" className="flex items-center gap-2.5 px-2.5">
         <img src="/icon.svg" alt="" className="h-8 w-8 rounded-xl" />
         <span className="font-display text-lg font-semibold">Our Studio</span>
       </Link>
@@ -89,6 +89,7 @@ function Sidebar({ me, path }: { me: User; path: string }) {
             return (
               <li key={p.id}>
                 <Link
+                  prefetch={false}
                   href={approved ? `/p/${p.id}/done` : `/p/${p.id}`}
                   aria-current={active ? 'page' : undefined}
                   className={`${item} ${active ? 'bg-white shadow-[var(--shadow-card)]' : ''}`}
@@ -112,7 +113,7 @@ function Sidebar({ me, path }: { me: User; path: string }) {
           })}
           {projects === null ? <li className="px-2.5 py-2 text-sm text-muted">Loading…</li> : null}
         </ul>
-        <Link href="/new" aria-current={path === '/new' ? 'page' : undefined} className={`${item} mt-2 text-lagoon-deep`}>
+        <Link prefetch={false} href="/new" aria-current={path === '/new' ? 'page' : undefined} className={`${item} mt-2 text-lagoon-deep`}>
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-line">
             <Icon name="plus" size={20} />
           </span>
@@ -122,21 +123,21 @@ function Sidebar({ me, path }: { me: User; path: string }) {
 
       <div className="space-y-0.5 border-t border-line/70 pt-3">
         {archived ? (
-          <Link href="/archived" aria-current={path === '/archived' ? 'page' : undefined} className={`${item} text-ink/75 ${path === '/archived' ? 'bg-white' : ''}`}>
+          <Link prefetch={false} href="/archived" aria-current={path === '/archived' ? 'page' : undefined} className={`${item} text-ink/75 ${path === '/archived' ? 'bg-white' : ''}`}>
             <Icon name="archive" size={18} />
             <span className="flex-1">Archived</span>
             <span className="text-xs text-muted">{archived}</span>
           </Link>
         ) : null}
-        <Link href="/activity" aria-current={path === '/activity' ? 'page' : undefined} className={`${item} text-ink/75 ${path === '/activity' ? 'bg-white' : ''}`}>
+        <Link prefetch={false} href="/activity" aria-current={path === '/activity' ? 'page' : undefined} className={`${item} text-ink/75 ${path === '/activity' ? 'bg-white' : ''}`}>
           <Icon name="clock" size={18} />
           <span className="flex-1">Activity</span>
         </Link>
-        <Link href="/household" aria-current={path === '/household' ? 'page' : undefined} className={`${item} text-ink/75 ${path === '/household' ? 'bg-white' : ''}`}>
+        <Link prefetch={false} href="/household" aria-current={path === '/household' ? 'page' : undefined} className={`${item} text-ink/75 ${path === '/household' ? 'bg-white' : ''}`}>
           <Icon name="users" size={18} />
           <span className="flex-1">Household</span>
         </Link>
-        <Link href="/how-it-works" aria-current={path === '/how-it-works' ? 'page' : undefined} className={`${item} text-ink/75 ${path === '/how-it-works' ? 'bg-white' : ''}`}>
+        <Link prefetch={false} href="/how-it-works" aria-current={path === '/how-it-works' ? 'page' : undefined} className={`${item} text-ink/75 ${path === '/how-it-works' ? 'bg-white' : ''}`}>
           <Icon name="info" size={18} />
           <span className="flex-1">How it works</span>
         </Link>
@@ -146,13 +147,13 @@ function Sidebar({ me, path }: { me: User; path: string }) {
           <kbd className="rounded-md bg-white px-1.5 text-xs text-muted ring-1 ring-line">?</kbd>
         </button>
         {me.admin ? (
-          <Link href="/admin" aria-current={path === '/admin' ? 'page' : undefined} className={`${item} text-ink/75`}>
+          <Link prefetch={false} href="/admin" aria-current={path === '/admin' ? 'page' : undefined} className={`${item} text-ink/75`}>
             <Icon name="settings" size={18} /> Setup
           </Link>
         ) : null}
         <form action="/api/logout" method="post" className="flex items-baseline gap-1.5 px-2.5 pt-2 text-xs text-muted">
           Signed in as{' '}
-          <Link href="/account" className="underline-offset-4 hover:text-ink hover:underline" aria-current={path === '/account' ? 'page' : undefined}>
+          <Link prefetch={false} href="/account" className="underline-offset-4 hover:text-ink hover:underline" aria-current={path === '/account' ? 'page' : undefined}>
             {me.name}
           </Link>{' '}
           ·

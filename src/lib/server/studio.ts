@@ -221,10 +221,13 @@ export interface ProjectState {
 
 export async function projectState(id: string, me: User): Promise<ProjectState> {
   const repo = getRepo();
+  // The designs and hearts are asked for alongside the project rather than after it: one trip to the database
+  // fewer on every project page. Nothing from them is used unless the membership check passes.
+  const early = Promise.all([repo.listOptions(id), repo.listReactions(id)]);
+  early.catch(() => undefined);
   const project = await projectFor(me, id);
-  const [all, reactions, decision, members, approverName] = await Promise.all([
-    repo.listOptions(id),
-    repo.listReactions(id),
+  const [[all, reactions], decision, members, approverName] = await Promise.all([
+    early,
     project.decisionId ? (repo.getDecision(project.decisionId) as Promise<Decision<ShirtSnapshot> | null>) : Promise.resolve(null),
     membersOf(householdOf(project)),
     nameOf(approverOf(project)),

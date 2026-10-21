@@ -65,7 +65,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
           <span className="font-display text-lg font-semibold">Our Studio</span>
         </div>
         {user.admin ? (
-          <Link href="/admin" className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-muted hover:bg-ink/5">
+          <Link prefetch={false} href="/admin" className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-muted hover:bg-ink/5">
             <Icon name="settings" size={16} /> Setup
           </Link>
         ) : null}
@@ -79,7 +79,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
       </p>
 
       {trouble.map((t) => (
-        <Link key={t.provider} href="/admin" className="mt-5 block rounded-2xl bg-coral-soft px-4 py-3 text-[15px] text-coral">
+        <Link prefetch={false} key={t.provider} href="/admin" className="mt-5 block rounded-2xl bg-coral-soft px-4 py-3 text-[15px] text-coral">
           <span className="font-semibold">{t.label} isn&apos;t working.</span> {t.message}
           <span className="mt-1 block text-sm">
             {t.effect} <span className="font-medium underline underline-offset-2">Open Setup</span>
@@ -92,6 +92,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
           {waiting.map((p) => (
             <li key={p.project.id}>
               <Link
+                prefetch={false}
                 href={`/p/${p.project.id}/${p.unseen ? 'browse' : 'favorites'}`}
                 className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[var(--shadow-card)] transition hover:shadow-[var(--shadow-lift)]"
               >
@@ -132,6 +133,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
           ))}
 
           <Link
+            prefetch={false}
             href="/new"
             className="flex items-center gap-4 rounded-3xl border-2 border-dashed border-line px-5 py-5 transition hover:border-lagoon/50 hover:bg-white/60"
           >
@@ -148,22 +150,22 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
 
       <div className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 lg:justify-start">
         {archived ? (
-          <Link href="/archived" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline">
+          <Link prefetch={false} href="/archived" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline">
             <Icon name="archive" size={16} /> Archived ({archived})
           </Link>
         ) : null}
-        <Link href="/activity" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline">
+        <Link prefetch={false} href="/activity" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline">
           <Icon name="clock" size={16} /> Activity
         </Link>
-        <Link href="/household" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline lg:hidden">
+        <Link prefetch={false} href="/household" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline lg:hidden">
           <Icon name="users" size={16} /> Household
         </Link>
         {firstVisit ? null : (
-          <Link href="/how-it-works" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline lg:hidden">
+          <Link prefetch={false} href="/how-it-works" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline lg:hidden">
             <Icon name="info" size={16} /> How it works
           </Link>
         )}
-        <Link href="/account" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline lg:hidden">
+        <Link prefetch={false} href="/account" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline lg:hidden">
           <Icon name="user" size={16} /> You
         </Link>
         {/* On a laptop it's at the foot of the sidebar. */}
@@ -202,6 +204,7 @@ function FirstVisit({ alone }: { alone: boolean }) {
     <>
       <section aria-label="Start your first project" className="mt-7">
         <Link
+          prefetch={false}
           href="/new"
           className="flex items-center gap-4 rounded-3xl bg-lagoon px-5 py-5 text-white shadow-[0_10px_30px_-12px_rgb(14_124_134/0.7)] transition hover:bg-lagoon-deep active:scale-[0.99] lg:max-w-2xl"
         >
@@ -218,6 +221,7 @@ function FirstVisit({ alone }: { alone: boolean }) {
           {OCCASION_PRESETS.map((o) => (
             <li key={o.id}>
               <Link
+                prefetch={false}
                 href={`/new?occasion=${o.id}`}
                 className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-[15px] shadow-[var(--shadow-card)] ring-1 ring-line hover:ring-ink/20"
               >
@@ -230,7 +234,7 @@ function FirstVisit({ alone }: { alone: boolean }) {
       </section>
 
       {alone ? (
-        <Link href="/household" className="mt-6 flex items-center gap-3 rounded-3xl bg-sun-soft px-5 py-4 text-[15px] text-[#6b4f0c] lg:max-w-2xl">
+        <Link prefetch={false} href="/household" className="mt-6 flex items-center gap-3 rounded-3xl bg-sun-soft px-5 py-4 text-[15px] text-[#6b4f0c] lg:max-w-2xl">
           <Icon name="users" size={20} className="shrink-0" />
           <span>
             <span className="font-medium">Better with company.</span> Our Studio is for deciding together: invite the people you&apos;re making this with from
@@ -350,7 +354,7 @@ function SetupNotice({ isJoel, problem }: { isJoel: boolean; problem: string }) 
         <>
           <p className="mt-3 text-muted">The database isn&apos;t quite connected yet. Here&apos;s what it says:</p>
           <p className="mt-4 rounded-2xl bg-sun-soft px-4 py-3 text-[15px] text-[#6b4f0c]">{problem}</p>
-          <Link href="/admin" className="mt-6 inline-flex h-11 items-center rounded-full bg-lagoon px-5 font-medium text-white">
+          <Link prefetch={false} href="/admin" className="mt-6 inline-flex h-11 items-center rounded-full bg-lagoon px-5 font-medium text-white">
             Open setup
           </Link>
         </>

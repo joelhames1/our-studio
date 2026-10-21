@@ -32,6 +32,7 @@ export function HomeProjectCard({
   const approved = project.status === 'approved';
   return (
     <Link
+      prefetch={false}
       href={approved ? `/p/${project.id}/done` : `/p/${project.id}`}
       className="group block overflow-hidden rounded-3xl bg-white shadow-[var(--shadow-card)] transition hover:shadow-[var(--shadow-lift)]"
     >

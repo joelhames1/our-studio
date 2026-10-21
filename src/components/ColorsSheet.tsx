@@ -6,6 +6,7 @@ import { pairing } from '@/lib/design/pairings';
 import { renderDesign } from '@/lib/design/render';
 import type { ColorPart, PartColors, ShirtDesign } from '@/lib/design/types';
 import { useFonts } from '@/lib/client/fonts';
+import { frontFonts } from '@/lib/design/fontsFor';
 import { http } from '@/lib/client/http';
 import { usePrefs } from '@/lib/client/prefs';
 import type { ShirtOption } from '@/lib/server/studio';
@@ -38,8 +39,9 @@ export function ColorsSheet({
 }) {
   const { state, addOptions } = useProject();
   const [prefs] = usePrefs();
-  const fonts = useFonts();
   const start = option.payload;
+  // Colors don't change the lettering, so this design's fonts are all it needs.
+  const fonts = useFonts(useMemo(() => frontFonts(start.pairing), [start.pairing]));
   const [palette, setPalette] = useState(start.palette);
   const [colors, setColors] = useState<PartColors>(start.colors ?? {});
   const [part, setPart] = useState<ColorPart>('headline');

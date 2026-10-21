@@ -8,7 +8,12 @@ export interface ArtRequest {
   colors?: string[];
   /** Built-in drawings that suit the project (the practice artist paints from these). */
   motifs?: MotifId[];
+  /** When the painting has to be done by (ms since 1970): each service fits its calls inside it, so the request ends with an answer rather than being cut off. */
+  deadline?: number;
 }
+
+/** How long a service may take on its next call: what's left before the deadline, at most `cap`, and never so little it can't try. */
+export const timeLeft = (req: Pick<ArtRequest, 'deadline'>, cap: number) => Math.max(5_000, Math.min(cap, (req.deadline ?? Infinity) - Date.now()));
 
 export interface ArtResult {
   data: Buffer;
@@ -28,7 +33,7 @@ export interface ImageProvider {
   /** AI upscaling for print (optional). */
   upscale?(png: Buffer): Promise<Buffer>;
   /** Background removal for providers without native transparency (optional). */
-  removeBackground?(png: Buffer): Promise<Buffer>;
+  removeBackground?(png: Buffer, timeoutMs?: number): Promise<Buffer>;
   /** Cheap call to confirm the key works. */
   ping(): Promise<string>;
 }

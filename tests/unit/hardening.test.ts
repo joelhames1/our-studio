@@ -4,8 +4,12 @@
 // downloads that stay on fal, and an outage that says so.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { signedIn, tempRepo } from './helpers';
+import { GET as asset } from '@/app/api/assets/[...key]/route';
 import { POST as build } from '@/app/api/decisions/[id]/build/route';
 import { preset } from '@/lib/design/occasions';
+import { previewKey } from '@/lib/design/preview';
+import { paintForTweak } from '@/lib/server/art';
+import { makePreview } from '@/lib/server/preview';
 import type { User } from '@/lib/engine/types';
 import { USERS } from '@/lib/server/auth';
 import { renameProject } from '@/lib/server/archive';
@@ -13,9 +17,11 @@ import { approve } from '@/lib/server/decisions';
 import { backFileNames } from '@/lib/server/export/package';
 import { cleanName, forgetDirectory, userById } from '@/lib/server/people';
 import { oneLine } from '@/lib/server/plain';
+import { aiTimings } from '@/lib/server/health';
 import { DatabaseUnreachable } from '@/lib/server/repo';
 import { sessionAlive } from '@/lib/server/sessions';
 import { createProject } from '@/lib/server/projects';
+import sharp from 'sharp';
 import { download } from '@/lib/server/providers/fal';
 import { MAX_SVG_ELEMENTS, sanitizeSvg } from '@/lib/server/providers/svg';
 import type { LocalRepo } from '@/lib/server/repo/local';
@@ -215,5 +221,87 @@ describe('a database outage', () => {
     // Any other trouble reading the list still counts as not signed in, for now.
     spy.mockRejectedValueOnce(new Error('something odd'));
     await expect(sessionAlive('odd-sid', 'joel')).resolves.toBe(false);
+  });
+});
+
+describe('a project page', () => {
+  it('asks for the designs and hearts alongside the project, and shows them only to its household', async () => {
+    const { repo } = tempRepo();
+    const sam = await riveras(repo);
+    const project = await birthday();
+    const order: string[] = [];
+    const getProject = repo.getProject.bind(repo);
+    vi.spyOn(repo, 'getProject').mockImplementation(async (id) => {
+      order.push('project asked');
+      await new Promise((r) => setTimeout(r, 50));
+      order.push('project back');
+      return getProject(id);
+    });
+    const listOptions = repo.listOptions.bind(repo);
+    vi.spyOn(repo, 'listOptions').mockImplementation(async (id) => {
+      order.push('designs asked');
+      return listOptions(id);
+    });
+    expect((await projectState(project.id, USERS.joel)).options.length).toBeGreaterThan(0);
+    expect(order.indexOf('designs asked')).toBeLessThan(order.indexOf('project back'));
+    await expect(projectState(project.id, sam)).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('AI call timings', () => {
+  it('give the typical and slowest time for each kind of call that finished', () => {
+    const at = new Date().toISOString();
+    const call = (note: string, ms?: number) => ({ id: note + ms, at, provider: 'anthropic', model: 'm', usd: 0.01, note, ms });
+    const timings = aiTimings([
+      call('design tweak', 4000),
+      call('design tweak', 6000),
+      call('design tweak', 30_000),
+      call('design tweak (in progress)', 1),
+      call('design tweak'),
+      call('artwork: a dog', 50_000),
+      call('word ideas (cut off)', 75_000),
+    ]);
+    expect(timings).toEqual([
+      { label: 'Change something (reading the request)', count: 3, typicalMs: 6000, slowestMs: 30_000, targetMs: 20_000 },
+      { label: 'Word ideas', count: 1, typicalMs: 75_000, slowestMs: 75_000, targetMs: 25_000 },
+      { label: 'A painting', count: 1, typicalMs: 50_000, slowestMs: 50_000, targetMs: 90_000 },
+    ]);
+  });
+});
+
+describe('artwork previews', () => {
+  it('are kept beside each painting, served small for a day, and made on first look for older ones', async () => {
+    const { repo } = tempRepo();
+    const sam = await riveras(repo);
+    const project = await birthday();
+    const art = await paintForTweak(project.id, 'a kite', 'lagoon', [], undefined, Date.now() + 60_000);
+    expect(art).toMatchObject({ kind: 'image' });
+    const key = (art as { assetKey: string }).assetKey;
+    const small = (await repo.getAsset(previewKey(key)))!;
+    const meta = await sharp(small.data).metadata();
+    expect([meta.format, meta.width! <= 768, meta.hasAlpha]).toEqual(['webp', true, true]);
+    // On something like a real painting (soft shading, a little grain) it's a small fraction of the original.
+    const painting = await sharp(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1536"><defs><radialGradient id="g" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#ffd166"/><stop offset="0.5" stop-color="#f2654e"/><stop offset="1" stop-color="#12355b"/></radialGradient><filter id="n"><feTurbulence baseFrequency="0.9" numOctaves="2"/><feColorMatrix values="0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0.25 0"/><feComposite in2="SourceGraphic" operator="in"/></filter></defs><ellipse cx="512" cy="760" rx="440" ry="620" fill="url(#g)"/><ellipse cx="512" cy="760" rx="440" ry="620" filter="url(#n)"/></svg>',
+      ),
+    )
+      .png()
+      .toBuffer();
+    expect((await makePreview(painting)).length).toBeLessThan(painting.length / 20);
+
+    // Artwork from before previews: the first look makes one.
+    await repo.deleteAssets([previewKey(key)]);
+    const get = async (who: string) => {
+      jar.value = await signedIn(who);
+      return asset(new Request(`https://studio.example.com/api/assets/${previewKey(key)}`), { params: Promise.resolve({ key: previewKey(key).split('/') }) });
+    };
+    const res = await get('joel');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/webp');
+    expect(res.headers.get('cache-control')).toBe('private, max-age=86400');
+    expect(await repo.getAsset(previewKey(key))).not.toBeNull();
+    // Still only for the household it belongs to.
+    expect((await get(sam.id)).status).toBe(404);
   });
 });
