@@ -58,8 +58,8 @@ beforeEach(() => {
   local = tempRepo().repo;
   process.env.SUPABASE_URL = base;
   process.env.SUPABASE_SECRET_KEY = KEY;
-  process.env.ERIN_GOOGLE_EMAIL = 'Erin.Example@gmail.com';
-  process.env.JOEL_GOOGLE_EMAIL = 'joel.example@gmail.com';
+  process.env.ERIN_GOOGLE_EMAIL = 'Erin@Example.com';
+  process.env.JOEL_GOOGLE_EMAIL = 'joel@example.com';
   seen = [];
   status = 200;
 });
@@ -105,7 +105,7 @@ describe('continue with Google', () => {
 
   it('signs Erin in, matched on the address Google vouches for', async () => {
     const verifier = await leave();
-    signedIn = googleUser('erin.example@GMAIL.com');
+    signedIn = googleUser('erin@EXAMPLE.com');
     const res = await comeBack('code=abc123', verifier);
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toBe(`${SITE}/`);
@@ -122,7 +122,7 @@ describe('continue with Google', () => {
 
   it('turns anyone else away and deletes the record Supabase made for them', async () => {
     const verifier = await leave();
-    signedIn = googleUser('someone.else@gmail.com');
+    signedIn = googleUser('someone.else@example.com');
     const res = await comeBack('code=abc123', verifier);
     expect(res.headers.get('location')).toBe(`${SITE}/?signin=not-invited`);
     expect(res.cookies.get(COOKIE)).toBeUndefined();
@@ -132,14 +132,14 @@ describe('continue with Google', () => {
   it('only takes Google’s word for it', async () => {
     const verifier = await leave();
     // Someone who made an account with Erin's address some other way.
-    signedIn = { id: STRANGER, email: 'erin.example@gmail.com', identities: [{ provider: 'email', identity_data: { email: 'erin.example@gmail.com' } }] };
+    signedIn = { id: STRANGER, email: 'erin@example.com', identities: [{ provider: 'email', identity_data: { email: 'erin@example.com' } }] };
     expect((await comeBack('code=abc', verifier)).headers.get('location')).toBe(`${SITE}/?signin=failed`);
-    signedIn = googleUser('erin.example@gmail.com', { email_verified: false });
+    signedIn = googleUser('erin@example.com', { email_verified: false });
     expect((await comeBack('code=abc', verifier)).headers.get('location')).toBe(`${SITE}/?signin=unverified`);
   });
 
   it('needs the verifier from the browser that left', async () => {
-    signedIn = googleUser('erin.example@gmail.com');
+    signedIn = googleUser('erin@example.com');
     const res = await comeBack('code=abc123');
     expect(res.headers.get('location')).toBe(`${SITE}/?signin=expired`);
     expect(res.cookies.get(COOKIE)).toBeUndefined();
@@ -159,7 +159,7 @@ describe('continue with Google', () => {
     const to = new URL((await start(new Request(`${SITE}/api/auth/google`))).headers.get('location')!);
     expect(`${to.origin}${to.pathname}`).toBe(`${base}/auth/v1/authorize`);
     const verifier = await leave();
-    signedIn = googleUser('joel.example@gmail.com');
+    signedIn = googleUser('joel@example.com');
     expect(await userForSession((await comeBack('code=abc', verifier)).cookies.get(COOKIE)!.value)).toEqual(USERS.joel);
     expect(seen.filter((s) => s.url.startsWith('/auth/')).at(-1)!.url).toBe('/auth/v1/token?grant_type=pkce');
   });
@@ -222,7 +222,7 @@ describe('straight to Google, with the site’s own client', () => {
 
   it('signs Joel in, trading the code with Google and nobody else', async () => {
     const verifier = await leave();
-    googleSays({ email: 'Joel.Example@gmail.com', email_verified: true });
+    googleSays({ email: 'Joel@Example.com', email_verified: true });
     const res = await comeBack('code=4%2F0abc', verifier);
     expect(res.headers.get('location')).toBe(`${SITE}/`);
     expect(await userForSession(res.cookies.get(COOKIE)!.value)).toEqual(USERS.joel);
@@ -235,7 +235,7 @@ describe('straight to Google, with the site’s own client', () => {
 
   it('turns anyone else away, with nothing to clean up afterwards', async () => {
     const verifier = await leave();
-    googleSays({ email: 'someone.else@gmail.com', email_verified: true });
+    googleSays({ email: 'someone.else@example.com', email_verified: true });
     const res = await comeBack('code=abc', verifier);
     expect(res.headers.get('location')).toBe(`${SITE}/?signin=not-invited`);
     expect(res.cookies.get(COOKIE)).toBeUndefined();
@@ -245,17 +245,17 @@ describe('straight to Google, with the site’s own client', () => {
   it('only believes a token Google made for this site, for an address it has checked', async () => {
     const verifier = await leave();
     const tryWith = async () => (await comeBack('code=abc', verifier)).headers.get('location');
-    googleSays({ email: 'erin.example@gmail.com', email_verified: true, aud: 'someone-elses-client.apps.googleusercontent.com' });
+    googleSays({ email: 'erin@example.com', email_verified: true, aud: 'someone-elses-client.apps.googleusercontent.com' });
     expect(await tryWith()).toBe(`${SITE}/?signin=failed`);
-    googleSays({ email: 'erin.example@gmail.com', email_verified: true, iss: 'https://evil.example' });
+    googleSays({ email: 'erin@example.com', email_verified: true, iss: 'https://evil.example' });
     expect(await tryWith()).toBe(`${SITE}/?signin=failed`);
-    googleSays({ email: 'erin.example@gmail.com', email_verified: true, exp: Math.floor(Date.now() / 1000) - 10 });
+    googleSays({ email: 'erin@example.com', email_verified: true, exp: Math.floor(Date.now() / 1000) - 10 });
     expect(await tryWith()).toBe(`${SITE}/?signin=failed`);
     answer = { status: 200, body: { id_token: 'not-a-token' } };
     expect(await tryWith()).toBe(`${SITE}/?signin=failed`);
-    googleSays({ email: 'erin.example@gmail.com', email_verified: false });
+    googleSays({ email: 'erin@example.com', email_verified: false });
     expect(await tryWith()).toBe(`${SITE}/?signin=unverified`);
-    googleSays({ email: 'erin.example@gmail.com' });
+    googleSays({ email: 'erin@example.com' });
     expect(await tryWith()).toBe(`${SITE}/?signin=unverified`);
   });
 

@@ -18,8 +18,8 @@ import { canApprove, projectState, react, setApprover } from '@/lib/server/studi
 const ENV = ['ERIN_GOOGLE_EMAIL', 'JOEL_GOOGLE_EMAIL'];
 const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
 beforeEach(() => {
-  process.env.ERIN_GOOGLE_EMAIL = 'erin.example@gmail.com';
-  process.env.JOEL_GOOGLE_EMAIL = 'joel.example@gmail.com';
+  process.env.ERIN_GOOGLE_EMAIL = 'erin@example.com';
+  process.env.JOEL_GOOGLE_EMAIL = 'joel@example.com';
 });
 afterEach(() => {
   for (const k of ENV) {

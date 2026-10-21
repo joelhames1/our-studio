@@ -35,8 +35,8 @@ const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
 
 beforeEach(() => {
   for (const k of ENV) delete process.env[k];
-  process.env.ERIN_GOOGLE_EMAIL = 'Erin.Example@gmail.com';
-  process.env.JOEL_GOOGLE_EMAIL = 'joel.example@gmail.com';
+  process.env.ERIN_GOOGLE_EMAIL = 'Erin@Example.com';
+  process.env.JOEL_GOOGLE_EMAIL = 'joel@example.com';
   // Email codes on, so sessions are signed with the server's own secret.
   process.env.RESEND_API_KEY = 're_test_not_real';
   process.env.SUPABASE_SECRET_KEY = 'sb_secret_test_not_real';
@@ -88,11 +88,11 @@ const call = (handler: unknown, method: string, url: string, params: object, bod
 describe('moving in', () => {
   it('adds Joel and Erin as the first household the first time, and only once', async () => {
     const { repo } = tempRepo();
-    expect(await userByEmail(' Joel.Example@GMAIL.com ')).toEqual(joel);
-    expect(await userByEmail('erin.example@gmail.com')).toEqual(erin);
+    expect(await userByEmail(' Joel@EXAMPLE.com ')).toEqual(joel);
+    expect(await userByEmail('erin@example.com')).toEqual(erin);
     const stored = (await repo.loadDirectory())!;
     expect(stored.people.map((p) => p.id).sort()).toEqual(['erin', 'joel']);
-    expect(stored.people.find((p) => p.id === 'joel')).toMatchObject({ email: 'joel.example@gmail.com', siteAdmin: true });
+    expect(stored.people.find((p) => p.id === 'joel')).toMatchObject({ email: 'joel@example.com', siteAdmin: true });
     expect(stored.households).toEqual([expect.objectContaining({ id: 'first', name: 'Joel & Erin', createdBy: 'joel' })]);
     expect(stored.memberships.map((m) => `${m.personId}:${m.role}`).sort()).toEqual(['erin:member', 'joel:owner']);
     expect(await directoryCounts()).toEqual({ households: 1, people: 2 });
@@ -102,17 +102,17 @@ describe('moving in', () => {
     expect((await repo.loadDirectory())!.people).toHaveLength(2);
 
     // A new address for Erin in Vercel moves her sign-in with it.
-    process.env.ERIN_GOOGLE_EMAIL = 'erin.new@gmail.com';
+    process.env.ERIN_GOOGLE_EMAIL = 'erin.new@example.com';
     forgetDirectory();
-    expect(await userByEmail('erin.new@gmail.com')).toEqual(erin);
-    expect(await userByEmail('erin.example@gmail.com')).toBeNull();
-    expect(await userByEmail('someone.else@gmail.com')).toBeNull();
+    expect(await userByEmail('erin.new@example.com')).toEqual(erin);
+    expect(await userByEmail('erin@example.com')).toBeNull();
+    expect(await userByEmail('someone.else@example.com')).toBeNull();
   });
 
   it('works from the two variables, as before, until the setup file is run', async () => {
     const { repo } = tempRepo();
     vi.spyOn(repo, 'loadDirectory').mockImplementation(async () => null as never);
-    expect(await userByEmail('erin.example@gmail.com')).toEqual(erin);
+    expect(await userByEmail('erin@example.com')).toEqual(erin);
     expect(await userById('joel')).toEqual(joel);
     expect(await directoryCounts()).toBeNull();
     expect((await membersOf('first')).map((m) => m.name)).toEqual(['Joel', 'Erin']);
@@ -310,7 +310,7 @@ describe('Supabase: people and households', () => {
           res.statusCode = 404;
           return res.end(JSON.stringify({ code: 'PGRST205', message: 'Could not find the table' }));
         }
-        if (req.method === 'GET' && table === 'people') return res.end(JSON.stringify([{ data: { id: 'joel', name: 'Joel', email: 'joel.example@gmail.com', createdAt: 't' } }]));
+        if (req.method === 'GET' && table === 'people') return res.end(JSON.stringify([{ data: { id: 'joel', name: 'Joel', email: 'joel@example.com', createdAt: 't' } }]));
         res.end('[]');
       });
     });
@@ -322,7 +322,7 @@ describe('Supabase: people and households', () => {
   it('reads all three tables, and says so when the setup file hasn’t been run', async () => {
     setUp = true;
     const repo = new SupabaseRepo(base, 'sb_secret_test');
-    expect(await repo.loadDirectory()).toEqual({ people: [{ id: 'joel', name: 'Joel', email: 'joel.example@gmail.com', createdAt: 't' }], households: [], memberships: [] });
+    expect(await repo.loadDirectory()).toEqual({ people: [{ id: 'joel', name: 'Joel', email: 'joel@example.com', createdAt: 't' }], households: [], memberships: [] });
     setUp = false;
     expect(await repo.loadDirectory()).toBeNull();
     const check = await repo.check();

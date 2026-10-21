@@ -25,8 +25,8 @@ const ENV = ['ERIN_GOOGLE_EMAIL', 'JOEL_GOOGLE_EMAIL', 'RESEND_API_KEY', 'SUPABA
 const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
 beforeEach(() => {
   for (const k of ENV) delete process.env[k];
-  process.env.ERIN_GOOGLE_EMAIL = 'erin.example@gmail.com';
-  process.env.JOEL_GOOGLE_EMAIL = 'joel.example@gmail.com';
+  process.env.ERIN_GOOGLE_EMAIL = 'erin@example.com';
+  process.env.JOEL_GOOGLE_EMAIL = 'joel@example.com';
   // Email codes on, so sessions are signed with the server's own secret.
   process.env.RESEND_API_KEY = 're_test_not_real';
   process.env.SUPABASE_SECRET_KEY = 'sb_secret_test_not_real';

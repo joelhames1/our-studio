@@ -46,7 +46,7 @@ const birthday = () => {
 };
 const alertsOn = () => {
   process.env.RESEND_API_KEY = 're_test_not_real';
-  process.env.ALERT_EMAIL = 'Joel.Example@gmail.com';
+  process.env.ALERT_EMAIL = 'Joel@Example.com';
 };
 
 describe('nightly backup', () => {
@@ -119,7 +119,7 @@ describe('alert emails', () => {
       'Our Studio: an AI service isn’t answering',
       'Our Studio: something broke on the server',
     ]);
-    expect(emails[0]).toMatchObject({ from: 'Our Studio <studio@evolvingword.com>', to: ['joel.example@gmail.com'] });
+    expect(emails[0]).toMatchObject({ from: 'Our Studio <studio@evolvingword.com>', to: ['joel@example.com'] });
     expect(emails[0].text).toContain('A request failed (POST /api/x).');
   });
 
@@ -144,6 +144,6 @@ describe('alert emails', () => {
     resendSays = { status: 403, body: { message: 'The evolvingword.com domain is not verified.' } };
     await expect(sendTestAlert()).rejects.toThrow('Resend refused it (403): The evolvingword.com domain is not verified.');
     resendSays = { status: 200, body: { id: 'email_2' } };
-    expect(await sendTestAlert()).toMatch(/Sent to joel\.example@gmail\.com/);
+    expect(await sendTestAlert()).toMatch(/Sent to joel@example\.com/);
   });
 });

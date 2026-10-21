@@ -25,8 +25,8 @@ beforeEach(() => {
   for (const k of ENV) delete process.env[k];
   process.env.RESEND_API_KEY = 're_test_not_real';
   process.env.SUPABASE_SECRET_KEY = 'sb_secret_test_not_real';
-  process.env.ERIN_GOOGLE_EMAIL = 'Erin.Example@gmail.com';
-  process.env.JOEL_GOOGLE_EMAIL = 'joel.example@gmail.com';
+  process.env.ERIN_GOOGLE_EMAIL = 'Erin@Example.com';
+  process.env.JOEL_GOOGLE_EMAIL = 'joel@example.com';
   emails = [];
   resendStatus = 200;
   const realFetch = globalThis.fetch;
@@ -67,9 +67,9 @@ describe('email codes', () => {
   it('email an invited address six digits, which sign that browser in once', async () => {
     const { repo } = tempRepo();
     expect(config.emailCodes).toBe(true);
-    const asked = await send(post('/api/auth/code', { email: '  Erin.Example@GMAIL.com ' }), ctx);
+    const asked = await send(post('/api/auth/code', { email: '  Erin@EXAMPLE.com ' }), ctx);
     expect(asked.status).toBe(200);
-    expect(await asked.json()).toEqual({ ok: true, to: 'erin.example@gmail.com' });
+    expect(await asked.json()).toEqual({ ok: true, to: 'erin@example.com' });
     const held = setCookie(asked, CODE_COOKIE);
     expect(held.line).toMatch(/HttpOnly/i);
     expect(held.line).toMatch(/SameSite=Strict/i);
@@ -77,7 +77,7 @@ describe('email codes', () => {
     expect(held.line).toMatch(/Max-Age=600/);
 
     expect(emails).toHaveLength(1);
-    expect(emails[0]).toMatchObject({ from: 'Our Studio <studio@evolvingword.com>', to: ['erin.example@gmail.com'] });
+    expect(emails[0]).toMatchObject({ from: 'Our Studio <studio@evolvingword.com>', to: ['erin@example.com'] });
     expect(emails[0].subject).toMatch(/^\d{6} is your Our Studio code$/);
     const code = codeIn();
     expect(emails[0].text).toContain(`Your Our Studio code is ${code}`);
@@ -114,7 +114,7 @@ describe('email codes', () => {
     const cross = new Request(`${SITE}/api/auth/code`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'sec-fetch-site': 'cross-site' },
-      body: JSON.stringify({ email: 'erin.example@gmail.com' }),
+      body: JSON.stringify({ email: 'erin@example.com' }),
     });
     expect((await send(cross, ctx)).status).toBe(403);
     expect(emails).toEqual([]);
@@ -122,7 +122,7 @@ describe('email codes', () => {
 
   it('allow five tries at a code, then it’s dead', async () => {
     tempRepo();
-    const { cookie } = await sendCode('joel.example@gmail.com');
+    const { cookie } = await sendCode('joel@example.com');
     const code = codeIn();
     const said: string[] = [];
     for (let i = 0; i < 5; i++) said.push(await checkCode(cookie, wrong(code)).then(() => 'in', (e: Error) => e.message));
@@ -139,7 +139,7 @@ describe('email codes', () => {
   it('only work for ten minutes, in the browser that asked, for the address it went to', async () => {
     tempRepo();
     const now = Date.now();
-    const { cookie } = await sendCode('erin.example@gmail.com', now);
+    const { cookie } = await sendCode('erin@example.com', now);
     const code = codeIn();
     await expect(checkCode(cookie, code, now + 10 * 60_000 + 1000)).rejects.toMatchObject({ status: 410 });
     await expect(checkCode(undefined, code, now)).rejects.toMatchObject({ status: 400 });
@@ -147,7 +147,7 @@ describe('email codes', () => {
     await expect(checkCode(cookie, '12345', now)).rejects.toMatchObject({ status: 400 });
     // Erin's code in a cookie rewritten to say Joel: the signature doesn't match.
     const [nonce, , exp, mac] = cookie.split('.');
-    const asJoel = [nonce, Buffer.from('joel.example@gmail.com').toString('base64url'), exp, mac].join('.');
+    const asJoel = [nonce, Buffer.from('joel@example.com').toString('base64url'), exp, mac].join('.');
     await expect(checkCode(asJoel, code, now)).rejects.toMatchObject({ status: 401 });
     // A later expiry: same.
     await expect(checkCode([nonce, cookie.split('.')[1], Number(exp) + 3600, mac].join('.'), code, now)).rejects.toMatchObject({ status: 401 });
@@ -157,23 +157,23 @@ describe('email codes', () => {
   it('send at most five codes an hour to one address', async () => {
     tempRepo();
     const hour = Math.floor(Date.now() / 3_600_000) * 3_600_000 + 60_000;
-    for (let i = 0; i < 5; i++) await sendCode('joel.example@gmail.com', hour + i * 1000);
-    await expect(sendCode('Joel.Example@gmail.com', hour + 10_000)).rejects.toMatchObject({ status: 429 });
+    for (let i = 0; i < 5; i++) await sendCode('joel@example.com', hour + i * 1000);
+    await expect(sendCode('Joel@Example.com', hour + 10_000)).rejects.toMatchObject({ status: 429 });
     expect(emails).toHaveLength(5);
     // Another address has its own count.
-    await sendCode('erin.example@gmail.com', hour + 10_000);
+    await sendCode('erin@example.com', hour + 10_000);
     expect(emails).toHaveLength(6);
   });
 
   it('say so when the email doesn’t go, and stop when they can’t be counted', async () => {
     const { repo } = tempRepo();
     resendStatus = 401;
-    await expect(sendCode('erin.example@gmail.com')).rejects.toMatchObject({ status: 502, message: expect.stringMatching(/didn’t go out/) });
+    await expect(sendCode('erin@example.com')).rejects.toMatchObject({ status: 502, message: expect.stringMatching(/didn’t go out/) });
     resendStatus = 200;
     vi.spyOn(repo, 'hit').mockResolvedValueOnce(null);
-    await expect(sendCode('erin.example@gmail.com')).rejects.toMatchObject({ status: 503 });
+    await expect(sendCode('erin@example.com')).rejects.toMatchObject({ status: 503 });
     vi.spyOn(repo, 'hit').mockRejectedValueOnce(new Error('database unreachable'));
-    await expect(sendCode('erin.example@gmail.com')).rejects.toMatchObject({ status: 503 });
+    await expect(sendCode('erin@example.com')).rejects.toMatchObject({ status: 503 });
     expect(emails).toEqual([]);
   });
 
@@ -181,7 +181,7 @@ describe('email codes', () => {
     tempRepo();
     delete process.env.RESEND_API_KEY;
     expect(config.emailCodes).toBe(false);
-    await expect(sendCode('erin.example@gmail.com')).rejects.toMatchObject({ status: 404 });
+    await expect(sendCode('erin@example.com')).rejects.toMatchObject({ status: 404 });
     process.env.RESEND_API_KEY = 're_test_not_real';
     delete process.env.SUPABASE_SECRET_KEY;
     expect(config.emailCodes).toBe(false);
@@ -190,7 +190,7 @@ describe('email codes', () => {
     delete process.env.ERIN_GOOGLE_EMAIL;
     delete process.env.JOEL_GOOGLE_EMAIL;
     expect(config.emailCodes).toBe(true);
-    await sendCode('erin.example@gmail.com');
+    await sendCode('erin@example.com');
     expect(emails).toEqual([]);
   });
 });
