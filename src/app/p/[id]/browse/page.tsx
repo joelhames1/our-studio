@@ -256,14 +256,15 @@ export default function BrowsePage() {
               setDrag(0);
             }}
           >
-            <div className="overflow-hidden rounded-t-[28px] bg-gradient-to-b from-sand-2/60 to-white px-6 pt-6">
+            <div className="relative overflow-hidden rounded-t-[28px] bg-gradient-to-b from-sand-2/60 to-white px-6 pt-6">
               <ShirtPreview design={top.payload} copy={copyOf(top)} style={prefs.style} color={prefs.color} view={flatView(prefs.view)} />
+              {/* On a phone the badges ride on the card, where "Erin loves this" is seen before voting: below it, they'd be under the buttons. */}
+              <div className="pointer-events-none absolute left-4 top-4 max-w-[55%] lg:hidden">
+                <DesignBadges option={top} className="flex flex-col items-start gap-1.5" />
+              </div>
             </div>
             {/* On a laptop these sit in the panel beside the card. */}
-            <div className="px-5 pb-4 pt-3 lg:hidden">
-              <DesignBadges option={top} />
-              <p className="mt-2 text-[13px] text-muted">{describeDesign(top)}</p>
-            </div>
+            <p className="px-5 pb-4 pt-3 text-[13px] text-muted lg:hidden">{describeDesign(top)}</p>
             <Stamp show={dx > 30} text="Love" className="left-5 -rotate-12 border-coral text-coral" opacity={Math.min(1, dx / THRESHOLD)} />
             <Stamp show={dx < -30} text="Pass" className="right-5 rotate-12 border-ink text-ink" opacity={Math.min(1, -dx / THRESHOLD)} />
           </div>

@@ -211,7 +211,8 @@ export function ProjectProvider({ initial, children }: { initial: ProjectState; 
     otherLoves: (oid) => othersLoved.has(oid),
     lovers: (oid) =>
       state.members.filter((m) => (m.id === me ? mine.get(oid) === 'love' : state.reactions.some((r) => r.optionId === oid && r.userId === m.id && r.value === 'love'))),
-    members: Math.max(state.members.length, 2),
+    // One means someone on their own so far; an empty list (no households table yet) reads as the two of you.
+    members: state.members.length === 1 ? 1 : Math.max(state.members.length, 2),
     matches,
     option: (oid) => state.options.find((o) => o.id === oid),
     anyOption: (oid) => state.options.find((o) => o.id === oid) ?? state.archived.find((o) => o.id === oid),

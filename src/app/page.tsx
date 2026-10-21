@@ -159,12 +159,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
           </Link>
         )}
         <Link href="/account" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline lg:hidden">
-          <Icon name="key" size={16} /> You
+          <Icon name="user" size={16} /> You
         </Link>
         {/* On a laptop it's at the foot of the sidebar. */}
         <form action="/api/logout" method="post" className="flex lg:hidden">
           <button className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline">
-            <Icon name="key" size={16} /> Sign out
+            <Icon name="logout" size={16} /> Sign out
           </button>
         </form>
       </div>

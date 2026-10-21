@@ -1,7 +1,8 @@
 // How the app talks about a household's hearts, whether it's two people or
 // more. Two keep the words they've always had ("you both love", "Both",
-// "Erin's hearts"); more get "shared hearts", "3 of 4" and "Everyone". Used on
-// the server and in the browser.
+// "Erin's hearts"); more get "shared hearts", "3 of 4" and "Everyone". Someone
+// on their own, before they've invited anyone, gets words with nobody else in
+// them. Used on the server and in the browser.
 
 /** "Erin", "Erin and Sam", "Erin, Sam and Ana", "Erin, Sam and 3 others". */
 export function listNames(names: string[]): string {
@@ -32,5 +33,5 @@ export function sharedCount(n: number, members: number): string {
 /** What the designs you love along with someone else are called, as a heading. */
 export const sharedTitle = (members: number) => (members <= 2 ? 'You both love' : 'Shared hearts');
 
-/** "both of you" for two, "everyone" for more. */
-export const allOfYou = (members: number) => (members <= 2 ? 'both of you' : 'everyone');
+/** "you" on your own, "both of you" for two, "everyone" for more. */
+export const allOfYou = (members: number) => (members <= 1 ? 'you' : members === 2 ? 'both of you' : 'everyone');

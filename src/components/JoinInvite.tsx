@@ -137,7 +137,7 @@ export function JoinInvite({ me, google, codes }: { me: { name: string } | null;
           {codes ? <EmailCode folded={google} beforeSend={hold} invited /> : null}
           {!google && !codes ? <p className="mt-6 rounded-2xl bg-sun-soft px-4 py-3 text-[15px] text-[#8a6410]">Signing in isn’t set up on this site yet.</p> : null}
           <p className="mt-6 text-sm text-muted">
-            We only ask Google (or your email) to confirm your address. Nothing is shared with the AI services until you say OK on the next screen.
+            We only ask {google ? 'Google (or your email)' : 'your email'} to confirm your address. Nothing is shared with the AI services until you say OK on the next screen.
           </p>
         </>
       )}

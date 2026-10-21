@@ -57,7 +57,7 @@ describe('the words', () => {
     expect([heartBadge(1, 2), heartBadge(2, 2), heartBadge(2, 4), heartBadge(4, 4)]).toEqual([null, 'Both', '2 of 4', 'Everyone']);
     expect([sharedLine(2, 2), sharedLine(3, 4), sharedLine(3, 3)]).toEqual(['You both love this', '3 of 4 love this', 'Everyone loves this']);
     expect([sharedCount(3, 2), sharedCount(1, 3), sharedCount(3, 3)]).toEqual(['3 you both love', '1 shared heart', '3 shared hearts']);
-    expect([sharedTitle(2), sharedTitle(3), allOfYou(2), allOfYou(5)]).toEqual(['You both love', 'Shared hearts', 'both of you', 'everyone']);
+    expect([sharedTitle(2), sharedTitle(3), allOfYou(1), allOfYou(2), allOfYou(5)]).toEqual(['You both love', 'Shared hearts', 'you', 'both of you', 'everyone']);
   });
 });
 

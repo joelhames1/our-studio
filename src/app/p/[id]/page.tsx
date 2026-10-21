@@ -106,7 +106,10 @@ export default function ProjectHub() {
       <div>
         <h1 className="font-display text-[28px] leading-tight font-semibold">Let&apos;s make the shirt</h1>
         <p className="mt-1.5 text-[15px] text-muted">
-          {when ? `${when}. ` : ''}Heart the ones you like; {members <= 2 ? 'the ones you both love' : 'the ones more of you love'} float to the top.
+          {when ? `${when}. ` : ''}
+          {members === 1
+            ? 'Heart the ones you like. Invite people from Household, and the ones you all love float to the top.'
+            : `Heart the ones you like; ${members === 2 ? 'the ones you both love' : 'the ones more of you love'} float to the top.`}
         </p>
 
         <div className="mt-5 overflow-hidden rounded-3xl bg-white shadow-[var(--shadow-card)]">

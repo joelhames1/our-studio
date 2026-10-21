@@ -115,7 +115,7 @@ export default async function HouseholdPage() {
           <p className="mt-2 text-sm text-muted">
             {limit === null ? `No limit of its own; the site’s $${config.monthlyBudgetUsd} a month covers it. ` : null}
             New artwork and Claude calls come out of it; fresh ideas, remixes and hand edits are free.{' '}
-            {user.admin ? 'Change it on the Setup page.' : `${ADMIN.name} sets ${limit === null ? 'that' : 'it'}.`}
+            {user.admin ? 'Change it on the Setup page.' : `${ADMIN.name}, who runs Our Studio, sets ${limit === null ? 'that' : 'it'}.`}
           </p>
         </div>
       ) : null}

@@ -16,13 +16,13 @@ export function describeDesign(o: ShirtOption): string {
   return [LAYOUTS[d.layout]?.name, pairing(d.pairing).name, palette(d.palette).name, art].filter(Boolean).join(' · ');
 }
 
-export function DesignBadges({ option }: { option: ShirtOption }) {
+export function DesignBadges({ option, className = 'flex flex-wrap gap-1.5' }: { option: ShirtOption; className?: string }) {
   const { state, otherLoves, myReaction, lovers, members } = useProject();
   const who = lovers(option.id);
   const others = who.filter((m) => m.id !== state.me.id);
   const both = otherLoves(option.id) && myReaction(option.id) === 'love';
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className={className}>
       {both ? (
         <Pill tone="coral">
           <Icon name="heart" size={12} filled /> {sharedLine(who.length, members)}

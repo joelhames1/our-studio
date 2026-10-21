@@ -55,7 +55,7 @@ export default function FavoritesPage() {
   }, [tab]);
   const base = `/p/${state.project.id}`;
 
-  const tabs: { id: Tab; label: string; n: number }[] = [
+  const allTabs: { id: Tab; label: string; n: number }[] = [
     { id: 'both', label: sharedTitle(members), n: groups.both.length },
     { id: 'mine', label: 'Your hearts', n: groups.mine.length },
     { id: 'theirs', label: members <= 2 ? `${other}'s hearts` : 'Others’ hearts', n: groups.theirs.length },
@@ -66,6 +66,8 @@ export default function FavoritesPage() {
       ? [{ id: 'archived' as Tab, label: 'Archived', n: state.archived.length + state.archivedBacks.length }]
       : []),
   ];
+  // On your own there's nobody to share hearts with yet.
+  const tabs = members > 1 ? allTabs : allTabs.filter((t) => t.id !== 'both' && t.id !== 'theirs');
   const list = groups[tab];
   const backList = tab === 'archived' ? state.archivedBacks : backs.filter((o) => {
     const m = myReaction(o.id);
@@ -83,13 +85,17 @@ export default function FavoritesPage() {
         kicker="Step 5"
         title="Favorites"
         sub={
-          members <= 2
-            ? groups.both.length
-              ? `${groups.both.length} design${groups.both.length === 1 ? '' : 's'} you and ${other} both love. Those float to the top.`
-              : `When you and ${other} both heart a design, it shows up here first.`
-            : groups.both.length
-              ? `${groups.both.length} design${groups.both.length === 1 ? '' : 's'} you and others love, the most-loved first.`
-              : 'When you and someone else heart the same design, it shows up here first.'
+          members === 1
+            ? groups.mine.length
+              ? `${groups.mine.length} design${groups.mine.length === 1 ? '' : 's'} you love so far. Invite people from Household, and the ones you all love come first.`
+              : 'Heart designs in Browse and they collect here. Invite people from Household to decide together.'
+            : members === 2
+              ? groups.both.length
+                ? `${groups.both.length} design${groups.both.length === 1 ? '' : 's'} you and ${other} both love. Those float to the top.`
+                : `When you and ${other} both heart a design, it shows up here first.`
+              : groups.both.length
+                ? `${groups.both.length} design${groups.both.length === 1 ? '' : 's'} you and others love, the most-loved first.`
+                : 'When you and someone else heart the same design, it shows up here first.'
         }
       />
       <div ref={tabRow} className="-mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]">

@@ -160,7 +160,7 @@ export default function OptionPage() {
         {o.archived || chosen ? null : (
           <div className="mt-3 flex justify-center">
             <Button variant="ghost" size="sm" icon="archive" onClick={shelf.archive} busy={shelf.busy}>
-              {members <= 2 ? 'Archive for both of us' : 'Archive for everyone'}
+              {members === 1 ? 'Archive it' : members === 2 ? 'Archive for both of us' : 'Archive for everyone'}
             </Button>
           </div>
         )}

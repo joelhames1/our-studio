@@ -102,7 +102,12 @@ for (const size of SIZES.filter((s) => !only || only.includes(s.name))) {
   // Joel, via the laptop picker.
   await page.goto(base);
   await page.getByRole('button', { name: "I'm Joel" }).click();
-  await page.getByRole('heading', { name: /Joel\./ }).waitFor();
+  // A fresh copy asks once how AI is used before the home screen.
+  const home = page.getByRole('heading', { name: /Joel\./ });
+  const ok = page.getByRole('button', { name: 'OK, let’s start' });
+  await home.or(ok).waitFor();
+  if (await ok.isVisible()) await ok.click();
+  await home.waitFor();
   await check('home');
 
   // A new graduation project, like the screenshots.
