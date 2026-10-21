@@ -164,6 +164,13 @@ export class SupabaseRepo implements Repo {
     const { error } = await this.sb.from('projects').upsert({ id: p.id, data: p });
     if (error) this.fail('save project', error);
   }
+  async addProject(p: Project) {
+    const { error } = await this.sb.from('projects').insert({ id: p.id, data: p });
+    // 23505: that id is taken.
+    if (error?.code === '23505') return false;
+    if (error) this.fail('save project', error);
+    return true;
+  }
 
   listOptions(projectId: string) {
     return this.rows<OptionRecord>('options', 'project_id', projectId);

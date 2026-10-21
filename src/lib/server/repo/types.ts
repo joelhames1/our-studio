@@ -25,6 +25,8 @@ export interface Repo {
   listProjects(): Promise<Project[]>;
   getProject(id: string): Promise<Project | null>;
   saveProject(p: Project): Promise<void>;
+  /** Saves a brand-new project, never over another: false if its id is already taken. */
+  addProject(p: Project): Promise<boolean>;
 
   listOptions(projectId: string): Promise<OptionRecord[]>;
   getOption(id: string): Promise<OptionRecord | null>;

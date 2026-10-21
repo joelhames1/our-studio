@@ -58,6 +58,23 @@ export async function download(url: string): Promise<Buffer> {
     if (buf.length > MAX_IMAGE_BYTES) throw new Error('fal.ai sent an image that was too big.');
     return buf;
   }
+  const signal = AbortSignal.timeout(120_000);
+  let res: Response | undefined;
+  // Redirects are followed by hand, and only to fal's own hosts.
+  for (let hops = 0; hops < 4 && !res; hops++) {
+    const u = falUrl(url);
+    const r = await fetch(u, { signal, redirect: 'manual' });
+    const next = r.status >= 300 && r.status < 400 ? r.headers.get('location') : null;
+    if (next) url = new URL(next, u).href;
+    else res = r;
+  }
+  if (!res) throw new Error('fal.ai’s image link kept redirecting.');
+  if (!res.ok) throw new Error(`Could not download the image (${res.status})`);
+  if (Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) throw new Error('fal.ai sent an image that was too big.');
+  return capped(res);
+}
+
+function falUrl(url: string): URL {
   let u: URL;
   try {
     u = new URL(url);
@@ -65,12 +82,26 @@ export async function download(url: string): Promise<Buffer> {
     throw new Error('fal.ai sent back a broken image link.');
   }
   if (u.protocol !== 'https:' || !FAL_HOST.test(u.hostname)) throw new Error(`fal.ai sent an image from an unexpected place (${u.hostname}).`);
-  const res = await fetch(u, { signal: AbortSignal.timeout(120_000) });
-  if (!res.ok) throw new Error(`Could not download the image (${res.status})`);
-  if (Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) throw new Error('fal.ai sent an image that was too big.');
-  const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length > MAX_IMAGE_BYTES) throw new Error('fal.ai sent an image that was too big.');
-  return buf;
+  return u;
+}
+
+/** The body, read a piece at a time and given up on as soon as it's too big, whatever the headers said. */
+async function capped(res: Response): Promise<Buffer> {
+  if (!res.body) return Buffer.alloc(0);
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  const reader = res.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_IMAGE_BYTES) {
+      await reader.cancel();
+      throw new Error('fal.ai sent an image that was too big.');
+    }
+    parts.push(value);
+  }
+  return Buffer.concat(parts);
 }
 
 const asDataUri = (png: Buffer) => `data:image/png;base64,${png.toString('base64')}`;

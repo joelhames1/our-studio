@@ -15,6 +15,7 @@ import type { DirectoryData } from './repo/types';
 import { FIRST_HOUSEHOLD, type Household, type HouseholdId, type HouseholdRole, type Membership, type Person, type User, type UserId } from '@/lib/engine/types';
 import { config } from './config';
 import { HttpError } from './errors';
+import { oneLine } from './plain';
 import { getRepo } from './repo';
 import type { Repo } from './repo/types';
 
@@ -206,7 +207,7 @@ export async function directoryStored(): Promise<boolean> {
 }
 
 /** A name someone typed, tidied: one line, at most 40 characters. Empty if there's nothing left. */
-export const cleanName = (name: unknown, max = 40): string => (typeof name === 'string' ? name.replace(/\s+/g, ' ').trim().slice(0, max).trim() : '');
+export const cleanName = (name: unknown, max = 40): string => oneLine(name, max);
 
 /** People's names by id, for showing who did what. */
 export async function names(): Promise<Map<UserId, string>> {

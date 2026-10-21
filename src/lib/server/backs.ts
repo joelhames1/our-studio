@@ -6,6 +6,7 @@ import { PAIRINGS } from '@/lib/design/pairings';
 import { PALETTES } from '@/lib/design/palettes';
 import type { User } from '@/lib/engine/types';
 import { HttpError } from './auth';
+import { oneLine } from './plain';
 import { addBackOptions, getBackOption } from './studio';
 
 /** Keeps only fields that make sense; null for pairing/palette means "match the front". */
@@ -42,6 +43,6 @@ export async function tweakBack(user: User, projectId: string, optionId: string,
   if (!result.changes.length) {
     throw new HttpError(422, 'I didn’t quite catch that. Try “smaller”, “in navy and gold”, “the receipt one” or “match the front”.');
   }
-  const [created] = await addBackOptions(projectId, user.id, 'tweak', [result.design], { parentId: optionId, label: text.slice(0, 80) });
+  const [created] = await addBackOptions(projectId, user.id, 'tweak', [result.design], { parentId: optionId, label: oneLine(text, 80) });
   return { option: created, summary: result.changes.join(', ') };
 }

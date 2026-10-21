@@ -27,6 +27,8 @@ Claude and fal.ai are optional. Without them the app still works: the built-in a
 
 After step 4, **Storage** should show a bucket called `studio` marked **Private**. The Setup page checks this and turns red if it's ever public.
 
+Leave **Project Settings → Data API → Max rows** at 1000 (the default) or more. The app reads long lists a thousand rows at a time; a lower number would make it stop early and miss some.
+
 > Heads-up: free Supabase projects pause after a week with no activity. If the app ever says it can't reach the database, open the Supabase dashboard and press **Restore**. Anything you'd saved is still there.
 
 ## 2. Claude (Anthropic)
@@ -55,10 +57,8 @@ Prefer OpenAI instead? Set `OPENAI_API_KEY` and skip fal.ai. Artwork quality is 
 | `SUPABASE_SECRET_KEY` | Your secret key from step 1 (or name it `SUPABASE_SERVICE_ROLE_KEY` if it's the older `service_role` key) |
 | `ANTHROPIC_API_KEY` | From step 2 |
 | `FAL_KEY` | From step 3 |
-| `ERIN_LINK_TOKEN` | A long random string (see below) |
-| `JOEL_LINK_TOKEN` | A different long random string |
 
-To make the two tokens, run `openssl rand -hex 24` twice in a terminal (each is 48 characters). Anything shorter than 24 characters is ignored (the welcome page will say sign-in isn't set up). No terminal handy? A password manager's generator works too: letters and digits only, 32 or more.
+People sign in with Google (section 8) or a code by email (section 9 sets up the email). The old personal links (`ERIN_LINK_TOKEN`, `JOEL_LINK_TOKEN`) still work if those variables are set, but leave them out: a link keeps working for as long as its variable is there, so one that leaks is a way in until someone notices. If you need one while setting up, make it with `openssl rand -hex 24` (anything under 24 characters is ignored) and delete the variable once Google works.
 
 Optional extras:
 
@@ -76,7 +76,8 @@ Optional extras:
 | `RESEND_API_KEY` | none | Sends the site's email: sign-in codes (section 8) and error alerts (section 9) |
 | `ALERT_EMAIL` | `CONTACT_EMAIL` | Where the error alerts go |
 | `EMAIL_FROM` | `Our Studio <studio@evolvingword.com>` | Who the site's email is from: an address on the domain verified with Resend (`ALERT_FROM`, its old name, still works) |
-| `SIGN_IN_LINKS` | on | `off` stops the personal links working, once you both use Google |
+| `SIGN_IN_LINKS` | on | `off` stops the personal links working, if their variables are still set |
+| `CODE_EMAILS_PER_DAY` | `100` | Most sign-in code emails the whole site sends in a day, so nobody can use up Resend's quota (and with it everyone's codes and alerts). Past it, the welcome page says to use Google |
 | `CONTACT_EMAIL` | none | The address the privacy page and terms tell people to write to (and the one Google's brand verification wants). Without it they say "the person who invited you". |
 
 4. Press **Deploy**. When it finishes you get a URL like `https://our-studio.vercel.app` (named after the Vercel project).
@@ -87,10 +88,10 @@ If you add or change environment variables later, redeploy (**Deployments**, the
 
 ## 5. Sign in and check everything
 
-1. Open `https://YOUR-APP.vercel.app/k#YOUR_JOEL_LINK_TOKEN` on your phone (note the `#`). That signs you in on that phone. Everything after the `#` stays on the phone: it never reaches Vercel's logs, and the app wipes it from the address bar straight away.
+1. Open the site on your phone and sign in with Google or an email code. (With a personal link variable set, `https://YOUR-APP.vercel.app/k#YOUR_JOEL_LINK_TOKEN` works too: everything after the `#` stays on the phone, never reaches Vercel's logs, and the app wipes it from the address bar straight away.)
 2. Tap **Setup** in the top corner. Every row should have a green tick. Press each **Test it** button.
    - If storage says the tables are missing, step 1.4 didn't run; the page shows the SQL with a copy button.
-3. Copy **Erin's link** (the button fetches it fresh; the page only shows it masked) and text it to her.
+3. Invite Erin from **Household → Invite someone** and text her the link.
 
 ## 6. For Erin
 
@@ -162,7 +163,7 @@ The home page, privacy page and terms are the three pages anyone can open withou
 Once Resend is set up (section 9: the `RESEND_API_KEY` the alerts use), the welcome page also offers **No Google account? Get a code by email**. You type your address, get six digits from `EMAIL_FROM`, and type them in. Nothing else to set: the codes go to the same addresses as Google sign-in (`ERIN_GOOGLE_EMAIL`, `JOEL_GOOGLE_EMAIL`), and Setup's **Email codes** row says whether it's on.
 
 - A code lasts 10 minutes and only works in the browser that asked for it, so a code read over someone's shoulder is no use on another phone.
-- Five wrong tries and that code is dead. Each address gets at most 5 codes an hour and 10 a day, which keeps six digits out of reach of guessing.
+- Five wrong tries and that code is dead. Each address gets at most 5 codes an hour and 10 a day from any one network (30 a day from everywhere), which keeps six digits out of reach of guessing. One network can ask for 20 an hour and 60 a day, one invite for 5, and the whole site sends at most `CODE_EMAILS_PER_DAY` (100), so nobody can use the form to flood someone's inbox or run down the email quota.
 - Every address gets the same answer ("if it's on the list, a code is on its way"), so the form can't be used to find out who's invited. Addresses that aren't on the list never get an email.
 - If the counters in the database can't be reached, codes stop working rather than going uncounted. Google sign-in carries on.
 
@@ -179,7 +180,7 @@ Two things that matter more once other people's work is in here: a copy of the d
 1. **Vercel** → Settings → Environment Variables: add `CRON_SECRET`, Production only, type **Secret**. Setup's **Backups** row suggests a value with a copy button (or run `openssl rand -hex 24`). Then redeploy.
 2. **Setup → Backups → Back up now** to make the first copy straight away. The row then shows when the last copy was made.
 
-From then on, Vercel runs it every night (`vercel.json` asks for 10:17 UTC, about 3am in California; on the free plan it can start any time in that hour). Each copy goes to the private storage as `backups/day-01.json` to `day-31.json`, so a month of them is always there and each replaces the one from a month before. Nobody can download them through the site; you can in Supabase → Storage → `studio` → `backups`. They guard against mistakes, like a project deleted by accident; restoring one is a job for Claude (`restore` in `src/lib/server/backup.ts`). They don't cover losing the Supabase project itself: Supabase Pro's own daily backups do, and Pro also stops a quiet project being paused after a week.
+From then on, Vercel runs it every night (`vercel.json` asks for 10:17 UTC, about 3am in California; on the free plan it can start any time in that hour). Each copy goes to the private storage named by its date (`backups/2026-10-21.json`), and copies older than 30 days are deleted, so a month of them is always there and something erased is gone from them within 30 days. (Copies from before they were dated, `day-01.json` to `day-31.json`, are cleared as their day comes round.) Nobody can download them through the site; you can in Supabase → Storage → `studio` → `backups`. They guard against mistakes, like a project deleted by accident; restoring one is a job for Claude (`restore` in `src/lib/server/backup.ts`). They don't cover losing the Supabase project itself: Supabase Pro's own daily backups do, and Pro also stops a quiet project being paused after a week.
 
 ### Error alerts by email (about 20 minutes, mostly waiting for DNS)
 
@@ -191,7 +192,7 @@ From then on, Vercel runs it every night (`vercel.json` asks for 10:17 UTC, abou
 6. **Vercel**: add `RESEND_API_KEY` (Production only, type Secret), and `ALERT_EMAIL` with the address the alerts should go to (leave it out to use `CONTACT_EMAIL`). Redeploy.
 7. **Setup → Error alerts → Send a test.** If Resend refuses it, the button says why (most often, the domain isn't verified yet). Check spam the first time, and mark it "not spam".
 
-What sends an alert: a request that fails with an error nobody planned for, a page that crashes, Claude refusing a request, the artwork service failing a whole batch, and a nightly backup that doesn't save. At most one email an hour for each kind; the rest are in Vercel's logs. Alerts say where and what went wrong, never what anyone typed.
+What sends an alert: a request that fails with an error nobody planned for, a page that crashes, Claude refusing a request, the database not being set up right, the artwork service failing a whole batch, rate limits that can't be counted, and a nightly backup that doesn't save. One email an hour for each problem, and at most three an hour of each kind, so one noisy problem can't hide another; the rest are in Vercel's logs. Alerts say where and what went wrong, never what anyone typed, and printer-link secrets, email addresses and long ids are blanked out. Whoever was using the site sees only what to do next ("The AI isn't working right now"), not the details.
 
 ## 10. Households
 
@@ -221,6 +222,8 @@ As the owner you can rename the household, and archive or delete any of its proj
 1. **Leaving or being taken out of a household** only ends the membership. Owners see them under **Past members** with **Invite back**, and their hearts return with them.
 2. **A closed account** (they closed it on You) or **a switched-off one** (you did, on Setup → People): signed out everywhere, out of every household, can't sign in, but everything is kept and their name stays on what they did. Ownership passes to whoever joined next if they were the only owner, and the final say on anything unapproved passes to an owner (it doesn't pass back on its own after a restore; use Final say · Change). An invite brings back someone who closed their own account, into that household; one you switched off only comes back when you **Restore** it, into every household it left. A household whose last person closed their account stays, listed on Setup → People as nobody's in it.
 3. **Erased for good**: only from Setup → People. **Erase now** works on a closed or switched-off account, with their name typed out; **Erase** on a household nobody's in, with its name. Someone closing their own account can tick **Also erase my data in 30 days**; the nightly job (the same one as the backup, after it) erases them when the date comes, and **Keep their data** on Setup → People stops it. Erasing takes their name, address, sign-ins, devices, hearts, maybes and passes, and any household nobody else could come back to, with all its projects and files. The nightly backups still hold a copy for 30 days. Your own account can't be closed or erased.
+
+**Spending totals (one more SQL step).** Run `supabase/migrations/0008_spend_totals.sql` the same way. It lets the database add up each household's spending for the month, so the budgets count every entry however many there are. Until it's run, the app adds them up itself (slower) and Setup's Storage row says it's missing.
 
 **AI budgets.** Each household has its own monthly AI limit as well as the site's `MONTHLY_BUDGET_USD`, so one busy household can't use up everyone else's month. New households start at $10; yours has no limit of its own unless you give it one, so only the site's budget applies to it. Change any of them on Setup under **AI spending this month** (**Change** next to each household; it takes effect at once, no redeploy). The site's budget is still the backstop: once it's used up, everyone stops, whatever their own limit. Each household sees its own total on its Household page; only you see everyone's totals, and the list of what was spent on shows only your household's.
 
@@ -265,15 +268,15 @@ Everything it finds comes from the printers' own pages and is marked "not verifi
 
 ## Lost phone or leaked link?
 
-Change that person's `*_LINK_TOKEN` in Vercel and redeploy. Their old link stops working, and so does every phone that was signed in with it (the other person stays signed in). Send them the new link from the Setup page. To sign everyone out at once, change `SESSION_VERSION` instead.
+From any other device: **You → Where you're signed in**, then sign out the lost one (or **Sign out everywhere else**). It takes effect within about half a minute. Signing out of every device belonging to someone else is Setup → People → switch the account off, then Restore it. To sign everyone out at once, change `SESSION_VERSION` and redeploy. If the Google account itself might be compromised, change its password at Google first.
 
-Signed in with Google? Change `SESSION_VERSION` and redeploy, which signs everyone out; then you each sign in with Google again. If the Google account itself might be compromised, change its password at Google first.
+Still have a personal link variable set (`*_LINK_TOKEN`)? Delete it and redeploy; that link stops working at once.
 
 ## Security checklist (before going live)
 
 The app's own sign-in is what keeps production private on Vercel's free plan, so these few settings matter:
 
-1. **Sign-in**: Google sign-in (section 8) with the Email provider off in Supabase, then `SIGN_IN_LINKS=off`. Email codes come on by themselves once Resend is set up. Until then, link tokens from `openssl rand -hex 24`, one each, sent privately (a text, not a group chat or email thread).
+1. **Sign-in**: Google sign-in (section 8) with the Email provider off in Supabase. Email codes come on by themselves once Resend is set up. No `*_LINK_TOKEN` variables left in Vercel.
 2. **Vercel environment variables** (Settings → Environment Variables): every row ticked for **Production** only, so preview builds can't use any of it, and every key or secret (the Supabase key, the AI keys, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `CRON_SECRET`, any link tokens) of type **Secret**. Plain settings like the email addresses can stay **Config**. Anything once marked Sensitive already counts as Secret. To fix a row that's wrong: delete it, add it again the right way, then redeploy.
 3. **Deployment Protection**: Settings → Deployment Protection → **Vercel Authentication** on, **Standard Protection**, Save. That puts every preview and every `….vercel.app` deployment address behind your Vercel login, while `studio.evolvingword.com` stays public, as it has to, with the app's own sign-in in front of it.
 4. **Hard spending caps at each AI provider**, as a backstop to the app's own monthly budget:

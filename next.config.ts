@@ -33,7 +33,13 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
-    return [{ source: '/:path*', headers: SECURITY_HEADERS }];
+    // Pages whose address carries something private (a printer link, an invite, a sign-in link) send
+    // no address at all when they load or link to anything; later rules win over the first.
+    const quiet = ['/s/:path*', '/join', '/join/:path*', '/k', '/k/:path*', '/api/auth/:path*'];
+    return [
+      { source: '/:path*', headers: SECURITY_HEADERS },
+      ...quiet.map((source) => ({ source, headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }] })),
+    ];
   },
 };
 

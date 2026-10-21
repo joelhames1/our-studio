@@ -1,4 +1,4 @@
-import { api, body } from '@/lib/server/api';
+import { api, body, text } from '@/lib/server/api';
 import { HttpError } from '@/lib/server/auth';
 import { config } from '@/lib/server/config';
 import { beforeAI } from '@/lib/server/consent';
@@ -13,9 +13,9 @@ export const POST = api<{ id: string }>(async (req, { id }) => {
   const { me } = await requireMember(id);
   if (!config.anthropicKey) throw new HttpError(400, 'Claude isn’t connected yet.');
   await beforeAI(me, 'claude');
-  const { hint } = await body<{ hint?: string }>(req);
+  const { hint } = await body<{ hint?: unknown }>(req);
   const project = await getShirtProject(id);
-  const ideas = await suggestCopy(project.brief.copy, hint ?? '', contextOf(project));
+  const ideas = await suggestCopy(project.brief.copy, text(hint, 300), contextOf(project));
   project.brief.copyIdeas = [...ideas, ...project.brief.copyIdeas].slice(0, 40);
   project.updatedAt = new Date().toISOString();
   await getRepo().saveProject(project);

@@ -15,6 +15,7 @@ import { FIRST_HOUSEHOLD } from './people';
 import { getRepo } from './repo';
 import { imageTrouble } from './health';
 import { reserveSpend } from './spend';
+import { oneLine } from './plain';
 import { addOptions, artIdeasOf, contextOf, getShirtProject, householdOf, newId, occasionsOf, type ShirtOption } from './studio';
 
 export function artAvailable(): boolean {
@@ -149,7 +150,7 @@ export async function generateArtOptions(user: User, projectId: string, opts: { 
       ticket: project.brief.ticket,
     };
   });
-  return addOptions(projectId, user.id, 'ai', designs, { parentId: base?.id ?? null, label: idea.slice(0, 80) || undefined });
+  return addOptions(projectId, user.id, 'ai', designs, { parentId: base?.id ?? null, label: oneLine(idea, 80) || undefined });
 }
 
 /** Paints a single subject for a tweak ("add a manta ray"). */

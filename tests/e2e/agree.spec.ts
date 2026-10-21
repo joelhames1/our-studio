@@ -42,7 +42,7 @@ test('on a phone, signing out is at the foot of the home screen', async ({ page 
   await expect(page.getByRole('heading', { name: /Joel\./ })).toBeVisible();
   // Setup's "Back up now" saves a copy, which is never served to anyone, Joel included.
   const backup = await page.request.post('/api/admin/test', { data: { target: 'backup' } });
-  expect(((await backup.json()) as { ok: boolean; message: string }).message).toMatch(/^Saved \d+ rows to backups\/day-\d\d\.json/);
+  expect(((await backup.json()) as { ok: boolean; message: string }).message).toMatch(/^Saved \d+ rows to backups\/\d{4}-\d\d-\d\d\.json/);
   expect((await page.request.get('/api/assets/backups/latest.json')).status()).toBe(404);
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByRole('button', { name: "I'm Joel" })).toBeVisible();

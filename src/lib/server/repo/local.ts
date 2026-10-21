@@ -90,6 +90,15 @@ export class LocalRepo implements Repo {
   async getProject(id: string) {
     return (await this.read()).projects.find((p) => p.id === id) ?? null;
   }
+  async addProject(p: Project) {
+    let added = false;
+    await this.write((db) => {
+      if (db.projects.some((x) => x.id === p.id)) return;
+      db.projects.push(p);
+      added = true;
+    });
+    return added;
+  }
   saveProject(p: Project) {
     return this.write((db) => {
       const i = db.projects.findIndex((x) => x.id === p.id);

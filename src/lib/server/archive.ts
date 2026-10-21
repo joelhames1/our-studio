@@ -6,6 +6,7 @@ import type { OptionRecord, User } from '@/lib/engine/types';
 import { BACK, type ShirtSnapshot } from '@/lib/kinds/shirt';
 import { record } from './activity';
 import { HttpError } from './auth';
+import { oneLine } from './plain';
 import { revokeProjectShares } from './printers';
 import { getRepo } from './repo';
 import { canManage, getShirtProject, type ShirtProject } from './studio';
@@ -49,7 +50,7 @@ export async function restoreProject(user: User, id: string): Promise<ShirtProje
 
 /** Either of you can rename a project; it's just a label. */
 export async function renameProject(user: User, id: string, title: unknown): Promise<ShirtProject> {
-  const clean = typeof title === 'string' ? title.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
+  const clean = oneLine(title, 60);
   if (!clean) throw new HttpError(400, 'Give it a name first.');
   const project = await getShirtProject(id);
   if (project.title === clean) return project;

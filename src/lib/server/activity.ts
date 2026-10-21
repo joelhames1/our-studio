@@ -31,7 +31,7 @@ export async function record(
 }
 
 /** Entries about a person rather than a project: only they and their household's owner see them. */
-const PERSONAL = new Set<ActivityAction>(['signed-in', 'agreed']);
+const PERSONAL = new Set<ActivityAction>(['signed-in', 'agreed', 'limited']);
 
 export interface ActivityPage {
   entries: ActivityEntry[];
@@ -43,9 +43,9 @@ export interface ActivityPage {
 
 /**
  * The household's log, newest first, as `user` may see it. Everyone sees what
- * happened to its projects; sign-ins and agreements are only shown to the
- * person themselves and the household's owner. Other households' entries never
- * show, for anyone.
+ * happened to its projects; sign-ins, agreements and hitting a limit are only
+ * shown to the person themselves and the household's owner. Other households'
+ * entries never show, for anyone.
  */
 export async function activityFor(user: User, opts: { projectId?: string; before?: string; limit?: number } = {}): Promise<ActivityPage> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);

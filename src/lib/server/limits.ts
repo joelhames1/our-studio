@@ -7,6 +7,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import type { User } from '@/lib/engine/types';
 import { record } from './activity';
+import { sendAlert } from './alerts';
 import { HttpError } from './auth';
 import { getRepo } from './repo';
 
@@ -60,6 +61,10 @@ export async function rateLimit(user: User, kind: LimitKind, now = Date.now()): 
       }
     }),
   );
+  if (counts.some((c) => c.n === null)) {
+    // Open rather than shut, so nobody is locked out by a database hiccup; but someone should know.
+    await sendAlert('server', ['Rate limits couldn’t be counted, so nobody is being slowed down right now (the AI budget still caps spending).', 'Setup → Storage says what’s wrong.']);
+  }
   const over = counts.find((c) => c.n !== null && c.n > c.max);
   if (!over) return;
   // Log the first refusal in a window, not every retry after it.

@@ -21,12 +21,11 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      // Pages only: API routes, build output and public files don't need it.
-      source: '/((?!api/|_next/static|_next/image|fonts/|favicon.ico|icon.svg|apple-touch-icon.png|manifest.webmanifest).*)',
-      missing: [
-        { type: 'header', key: 'next-router-prefetch' },
-        { type: 'header', key: 'purpose', value: 'prefetch' },
-      ],
+      // Pages only: API routes, build output, public files and printer-link files (which send their own, stricter policy) don't need it.
+      source: '/((?!api/|_next/static|_next/image|fonts/|favicon.ico|icon.svg|apple-touch-icon.png|manifest.webmanifest|s/[^/]+/f/).*)',
+      // The app's own prefetches are data, not pages. A browser's prefetch ("Purpose: prefetch") is a whole
+      // page it may show later, so that one still gets a policy.
+      missing: [{ type: 'header', key: 'next-router-prefetch' }],
     },
   ],
 };

@@ -149,8 +149,8 @@ export default function PrivacyPage() {
             designs, hearts, approvals, artwork and print files. The activity log keeps the entries saying what happened, including the deletion.
           </li>
           <li>
-            A copy of the database is made every night and kept for a month, in the same private storage, so a mistake can be undone. Something erased is gone
-            from those copies within a month too.
+            A copy of the database is made every night and kept for 30 days, in the same private storage, so a mistake can be undone. Something erased is gone
+            from those copies within 30 days too.
           </li>
           <li>
             Leaving a household, or being taken out of one, deletes nothing: you stop seeing its projects, your hearts stop counting, and an invite brings you

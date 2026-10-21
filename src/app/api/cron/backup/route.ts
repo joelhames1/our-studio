@@ -15,9 +15,9 @@ const digest = (s: string) => createHash('sha256').update(s).digest();
  * run; without it, nobody else can start one.
  */
 export async function GET(req: Request) {
+  // Without CRON_SECRET, scheduled backups are off (Setup says so); from outside, that looks the same as a wrong secret.
   const secret = config.cronSecret;
-  if (!secret) return Response.json({ error: 'CRON_SECRET isn’t set, so scheduled backups are off.' }, { status: 503, headers: NO_STORE });
-  if (!timingSafeEqual(digest(req.headers.get('authorization') ?? ''), digest(`Bearer ${secret}`))) {
+  if (!secret || !timingSafeEqual(digest(req.headers.get('authorization') ?? ''), digest(`Bearer ${secret}`))) {
     return Response.json({ error: 'Not here.' }, { status: 401, headers: NO_STORE });
   }
   try {

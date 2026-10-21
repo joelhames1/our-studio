@@ -48,7 +48,8 @@ export const GET = api<{ key: string[] }>(async (req, { key }) => {
   if (!asset) throw new HttpError(404, 'File not found.');
   const headers: Record<string, string> = {
     'Content-Type': asset.contentType,
-    'Cache-Control': 'private, max-age=31536000, immutable',
+    // An hour, not forever: someone who leaves the household stops seeing its files soon after.
+    'Cache-Control': 'private, max-age=3600',
     // Opened on its own (an SVG, say), a stored file can't run anything or load anything.
     'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
     'X-Content-Type-Options': 'nosniff',

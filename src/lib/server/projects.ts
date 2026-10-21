@@ -11,6 +11,7 @@ import { record } from './activity';
 import { HttpError } from './auth';
 import { config } from './config';
 import { newId, slugify } from './ids';
+import { oneLine } from './plain';
 import { draftProject, type ProjectDraft } from './llm/tasks';
 import { getRepo } from './repo';
 import { addOptions, starterBackOptions, type ShirtProject } from './studio';
@@ -28,7 +29,7 @@ export interface NewProjectInput {
   facts?: Partial<Pick<Facts, 'stops' | 'statement' | 'place'>>;
 }
 
-const str = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+const str = (v: unknown, max: number) => oneLine(typeof v === 'number' ? String(v) : v, max);
 const cleanCopy = (c: Partial<Copy> | undefined): Copy => ({ headline: str(c?.headline, 140), tagline: str(c?.tagline, 140), extra: str(c?.extra, 140) });
 
 export function cleanBasics(b: Partial<Basics> | undefined): Basics {
@@ -76,7 +77,7 @@ export async function createProject(user: User, input: NewProjectInput): Promise
     },
     base,
   );
-  const ideas = [copy, ...(input.copyIdeas ?? []).map(cleanCopy).filter((c) => c.headline)];
+  const ideas = [copy, ...(Array.isArray(input.copyIdeas) ? input.copyIdeas : []).map(cleanCopy).filter((c) => c.headline)];
   const seen = new Set<string>();
   const copyIdeas = ideas.filter((c) => {
     const k = `${c.headline}|${c.tagline}`.toLowerCase();
@@ -86,8 +87,9 @@ export async function createProject(user: User, input: NewProjectInput): Promise
   });
 
   const t = new Date().toISOString();
+  const slug = slugify(basics.title) || occasion;
   const project: ShirtProject = {
-    id: `${slugify(basics.title) || occasion}-${newId().slice(0, 5)}`,
+    id: `${slug}-${newId().slice(0, 8)}`,
     kind: 'shirt',
     title: basics.title,
     createdAt: t,
@@ -108,7 +110,11 @@ export async function createProject(user: User, input: NewProjectInput): Promise
     },
   };
   const repo = getRepo();
-  await repo.saveProject(project);
+  // Never over someone else's project, however unlikely the same id twice is.
+  for (let tries = 1; !(await repo.addProject(project)); tries++) {
+    if (tries === 3) throw new Error('Couldn’t find a free id for a new project.');
+    project.id = `${slug}-${newId().slice(0, 8)}`;
+  }
   // The occasion's own sample design leads the deck, then a fresh mix.
   const sample = preset(occasion).sample;
   const fronts = generateFresh({ vibes: [], count: 15, rand: seeded(Date.parse(t) % 100000), occasions: [occasion], exclude: new Set([designKey(sample)]) });

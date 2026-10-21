@@ -82,6 +82,18 @@ export const fmtIn = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed
 /** "Erin" → "ERIN", safe for a file name. */
 const nameSlug = (n: string) => n.normalize('NFKD').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').toUpperCase() || 'NAME';
 
+/** A back print file for each person. Two whose names come out the same (two Alexes, Zoë and Zoe) still get one each, rather than one overwriting the other. */
+export function backFileNames(people: (string | undefined)[], dims: string): string[] {
+  const taken = new Map<string, number>();
+  return people.map((who) => {
+    const slug = who ? nameSlug(who) : '';
+    const n = (taken.get(slug) ?? 0) + 1;
+    taken.set(slug, n);
+    const tag = [slug, n > 1 ? String(n) : ''].filter(Boolean).join('-');
+    return `print-file-back-${tag ? `${tag}-` : ''}${dims}.png`;
+  });
+}
+
 export async function buildShirtPackage(decision: Decision<ShirtSnapshot>, projectTitle: string): Promise<PackageFile[]> {
   const snap = decision.snapshot;
   const repo = getRepo();
@@ -119,10 +131,11 @@ export async function buildShirtPackage(decision: Decision<ShirtSnapshot>, proje
     const backPx = Math.round(backSize.w * DPI);
     const people = bt.personal ? (b.names.length ? b.names : b.facts.people.slice(0, 1)) : [undefined];
     const job = (wearer?: string): BackJob => ({ design: b.design, facts: b.facts, front: design, copy, wearer });
-    for (const who of people) {
+    const names = backFileNames(people, backDims);
+    for (const [i, who] of people.entries()) {
       const svg = backSvg(job(who), fonts, face, backSize.w);
       const out = await renderPrintPng(svg, backPx);
-      const name = who ? `print-file-back-${nameSlug(who)}-${backDims}.png` : `print-file-back-${backDims}.png`;
+      const name = names[i];
       backFiles.push({ name, data: out.png, label: who ? `Back print file: ${who}` : 'Back print file', px: `${out.width} × ${out.height} px` });
     }
     const first = job(people[0]);

@@ -179,6 +179,9 @@ const NOTE_STYLE: Record<FitNote['level'], { icon: string; tone: string }> = {
   warn: { icon: 'alert', tone: 'text-coral' },
 };
 
+/** An Email link to exactly that address: anything after it (a "?bcc=" in a page's text, say) is part of the address, not the link. */
+const mailto = (email: string) => `mailto:${encodeURIComponent(email).replace(/%40/g, '@')}`;
+
 function PrinterCard({ p, job, onUpdate, onSend }: { p: Printer; job: PrintJob; onUpdate: (patch: { status?: PrinterStatus; remove?: true }) => void; onSend: () => void }) {
   const notes = fitCheck(p, job);
   const details: [string, string | null][] = [
@@ -252,7 +255,7 @@ function PrinterCard({ p, job, onUpdate, onSend }: { p: Printer; job: PrintJob; 
           </a>
         ) : null}
         {p.email ? (
-          <a href={`mailto:${p.email}`} className="inline-flex items-center gap-1 font-medium text-lagoon">
+          <a href={mailto(p.email)} className="inline-flex items-center gap-1 font-medium text-lagoon">
             <Icon name="mail" size={14} /> Email
           </a>
         ) : null}
@@ -338,7 +341,7 @@ function SendSheet({ printer, job, onClose }: { printer: Printer | null; job: Pr
           <div className="mt-3 flex flex-wrap gap-2">
             {printer?.email ? (
               <a
-                href={`mailto:${printer.email}?subject=${encodeURIComponent(message.subject)}&body=${encodeURIComponent(message.body)}`}
+                href={`${mailto(printer.email)}?subject=${encodeURIComponent(message.subject)}&body=${encodeURIComponent(message.body)}`}
                 className="inline-flex h-11 items-center gap-2 rounded-full bg-lagoon px-5 font-medium text-white"
               >
                 <Icon name="mail" size={18} /> Email them

@@ -140,6 +140,10 @@ describe('what the web says', () => {
     const bad = cleanFound(found({ website: 'javascript:alert(1)', email: 'not an email', name: 'Plain Name' }), '90210', '')!;
     expect(bad.website).toBeNull();
     expect(bad.email).toBeNull();
+    // A page that tries to sneak a second recipient into the Email them link gets no address at all.
+    for (const sneaky of ['orders@shop.example?bcc=spy%40evil.example&x=y.example', 'orders@shop.example&cc=spy@evil.example', 'Shop <orders@shop.example>']) {
+      expect(cleanFound(found({ email: sneaky }), '90210', '')!.email).toBeNull();
+    }
     expect(bad.id).toBe('p-plain-name');
     expect(cleanFound(found({ name: '   ' }), '90210', '')).toBeNull();
   });

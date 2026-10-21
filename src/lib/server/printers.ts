@@ -108,7 +108,8 @@ export function cleanFound(f: FoundPrinter, zip: string, checkedAt: string): Pri
     kind: f.kind === 'online' ? 'online' : 'local',
     website,
     phone: str(f.phone, 40)?.replace(/[^\d+()\-. x]/g, '').trim() || null,
-    email: email && /^[^\s@<>"]+@[^\s@<>"]+\.[a-z]{2,}$/i.test(email) ? email : null,
+    // A plain address only: a web page could otherwise slip "?bcc=someone" into the Email them link.
+    email: email && /^[a-z0-9._+'-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(email) ? email : null,
     address: str(f.address, 160),
     area: str(f.area, 80),
     methods: [...new Set((Array.isArray(f.methods) ? f.methods : []).filter((m): m is PrintMethod => (PRINT_METHODS as readonly string[]).includes(m)))],

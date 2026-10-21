@@ -9,6 +9,7 @@ import { HttpError } from './auth';
 import { getRepo } from './repo';
 import { addArtRequest } from '@/lib/design/examples';
 import { motifsFor } from '@/lib/design/occasions';
+import { oneLine } from './plain';
 import { addOptions, contextOf, getShirtProject, occasionsOf, type ShirtOption } from './studio';
 
 /** Hook for a smarter interpreter (Claude); falls back to keywords. */
@@ -47,7 +48,7 @@ export async function tweakOption(user: User, projectId: string, optionId: unkno
   if (!result.changes.length) {
     throw new HttpError(422, `I didn’t quite catch that. Try “bigger words”, “coral big words”, “${addArtRequest(occasions).toLowerCase()}” or “simpler”.`);
   }
-  const [created] = await addOptions(projectId, user.id, 'tweak', [result.design], { parentId: option.id, label: text.slice(0, 80) });
+  const [created] = await addOptions(projectId, user.id, 'tweak', [result.design], { parentId: option.id, label: oneLine(text, 80) });
   return { option: created, summary: result.changes.join(', ') };
 }
 
