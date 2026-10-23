@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { ShirtPreview } from '@/components/ShirtPreview';
 import { toast } from '@/components/Toast';
@@ -9,7 +9,7 @@ import { BottomBar, Button, PageTitle } from '@/components/ui';
 import { http } from '@/lib/client/http';
 import { usePrefs } from '@/lib/client/prefs';
 import type { Facts, Occasion } from '@/lib/design/back/types';
-import { OCCASION_PRESETS, preset, type Basics } from '@/lib/design/occasions';
+import { OCCASION_PRESETS, preset, suggestedTitle, type Basics } from '@/lib/design/occasions';
 import type { Copy } from '@/lib/design/types';
 
 type Step = 'occasion' | 'basics' | 'words';
@@ -23,8 +23,10 @@ interface Draft {
 }
 
 const EMPTY: Basics = { title: '', people: [], dates: '', number: '', year: '', place: '' };
+// Examples sit pale behind "e.g." so an empty box never looks filled in.
 const input =
-  'h-12 w-full rounded-2xl bg-white px-4 text-[16px] shadow-[var(--shadow-card)] outline-none ring-1 ring-line focus:ring-2 focus:ring-lagoon';
+  'h-12 w-full rounded-2xl bg-white px-4 text-[16px] shadow-[var(--shadow-card)] outline-none ring-1 ring-line placeholder:text-ink/30 focus:ring-2 focus:ring-lagoon';
+const eg = (s?: string) => (s ? `e.g. ${s}` : undefined);
 
 /** Start something new: what it is, the basics, then the words. */
 export function NewProject({ ai, start }: { ai: boolean; start?: Occasion }) {
@@ -40,9 +42,13 @@ export function NewProject({ ai, start }: { ai: boolean; start?: Occasion }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [describe, setDescribe] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  // Next was pressed with no name yet: say so beside the box rather than greying the button out.
+  const [nameMissing, setNameMissing] = useState(false);
+  const titleField = useRef<HTMLInputElement>(null);
   const p = occasion ? preset(occasion) : null;
 
   const filled = (): Basics => ({ ...basics, people: people.split(/[,\n]+/).map((x) => x.trim()).filter(Boolean) });
+  const suggestion = occasion ? suggestedTitle(occasion, filled()) : null;
 
   const choose = (o: Occasion) => {
     setOccasion(o);
@@ -71,6 +77,11 @@ export function NewProject({ ai, start }: { ai: boolean; start?: Occasion }) {
 
   const toWords = () => {
     if (!p) return;
+    if (!basics.title.trim()) {
+      setNameMissing(true);
+      titleField.current?.focus();
+      return;
+    }
     const b = filled();
     const seen = new Set<string>();
     const list = [...(draft?.occasion === occasion ? draft.ideas : []), ...p.copyIdeas(b)].filter((c) => {
@@ -181,13 +192,39 @@ export function NewProject({ ai, start }: { ai: boolean; start?: Occasion }) {
           <PageTitle kicker={`Step 2 · ${p.short}`} title="The basics" sub="Only the name is needed. Everything else makes the starter words and backs better." />
           <div className="space-y-4">
             <Field label={p.labels.title}>
-              <input className={input} value={basics.title} onChange={(e) => setBasics({ ...basics, title: e.target.value })} placeholder={p.labels.titlePlaceholder} aria-label={p.labels.title} autoFocus />
+              <input
+                ref={titleField}
+                className={`${input} ${nameMissing && !basics.title.trim() ? 'ring-2 ring-coral' : ''}`}
+                value={basics.title}
+                onChange={(e) => setBasics({ ...basics, title: e.target.value })}
+                placeholder={eg(p.labels.titlePlaceholder)}
+                aria-label={p.labels.title}
+                aria-invalid={nameMissing && !basics.title.trim()}
+                autoFocus
+              />
             </Field>
+            {!basics.title.trim() && (nameMissing || suggestion) ? (
+              <div className="-mt-2 flex flex-wrap items-center gap-2 text-sm">
+                {nameMissing ? <span className="font-medium text-coral">Give it a name to keep going.</span> : null}
+                {suggestion ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBasics({ ...basics, title: suggestion });
+                      setNameMissing(false);
+                    }}
+                    className="rounded-full bg-lagoon-soft px-3 py-1 font-medium text-lagoon-deep"
+                  >
+                    Use “{suggestion}”
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <Field label={p.labels.people} hint="Commas between names">
-              <input className={input} value={people} onChange={(e) => setPeople(e.target.value)} placeholder={p.labels.peoplePlaceholder} aria-label={p.labels.people} />
+              <input className={input} value={people} onChange={(e) => setPeople(e.target.value)} placeholder={eg(p.labels.peoplePlaceholder)} aria-label={p.labels.people} />
             </Field>
             <Field label="When?">
-              <input className={input} value={basics.dates} onChange={(e) => setBasics({ ...basics, dates: e.target.value })} placeholder={p.labels.datesPlaceholder} aria-label="When?" />
+              <input className={input} value={basics.dates} onChange={(e) => setBasics({ ...basics, dates: e.target.value })} placeholder={eg(p.labels.datesPlaceholder)} aria-label="When?" />
             </Field>
             {p.labels.number || p.labels.year ? (
               <div className="flex gap-3">
@@ -205,7 +242,7 @@ export function NewProject({ ai, start }: { ai: boolean; start?: Occasion }) {
             ) : null}
             {p.labels.place ? (
               <Field label={p.labels.place}>
-                <input className={input} value={basics.place} onChange={(e) => setBasics({ ...basics, place: e.target.value })} placeholder={p.labels.placePlaceholder} aria-label={p.labels.place} />
+                <input className={input} value={basics.place} onChange={(e) => setBasics({ ...basics, place: e.target.value })} placeholder={eg(p.labels.placePlaceholder)} aria-label={p.labels.place} />
               </Field>
             ) : null}
             {draft?.occasion === occasion && draft.facts.stops?.length ? (
@@ -215,7 +252,7 @@ export function NewProject({ ai, start }: { ai: boolean; start?: Occasion }) {
             ) : null}
           </div>
           <BottomBar>
-            <Button size="lg" className="w-full" icon="type" disabled={!basics.title.trim()} onClick={toWords}>
+            <Button size="lg" className="w-full" icon="type" onClick={toWords}>
               Next: the words
             </Button>
           </BottomBar>

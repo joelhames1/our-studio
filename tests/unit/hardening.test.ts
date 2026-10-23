@@ -262,7 +262,7 @@ describe('AI call timings', () => {
       call('word ideas (cut off)', 75_000),
     ]);
     expect(timings).toEqual([
-      { label: 'Change something (reading the request)', count: 3, typicalMs: 6000, slowestMs: 30_000, targetMs: 20_000 },
+      { label: 'Change it (reading the request)', count: 3, typicalMs: 6000, slowestMs: 30_000, targetMs: 20_000 },
       { label: 'Word ideas', count: 1, typicalMs: 75_000, slowestMs: 75_000, targetMs: 25_000 },
       { label: 'A painting', count: 1, typicalMs: 50_000, slowestMs: 50_000, targetMs: 90_000 },
     ]);

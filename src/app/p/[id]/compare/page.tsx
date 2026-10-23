@@ -13,6 +13,8 @@ import { compareHref, MAX_COMPARE, setCompare } from '@/lib/client/compare';
 import { flatView, usePrefs } from '@/lib/client/prefs';
 import type { ShirtOption } from '@/lib/server/studio';
 import { listNames } from '@/lib/engine/together';
+import { designHref } from '@/lib/engine/paths';
+import { useDesktop } from '@/lib/client/media';
 
 const VIEWS = [
   { id: 'chest', label: 'Close-up' },
@@ -30,7 +32,7 @@ export default function ComparePage() {
   );
 }
 
-/** Who's hearted it so far, and who hasn't (yet), in a household of more than two. A pass looks the same as not yet. */
+/** Who loves it so far, and who doesn't (yet), in a household of more than two. A pass looks the same as not yet. */
 function HeartRoll({ loved, everyone, me }: { loved: { id: string; name: string }[]; everyone: { id: string; name: string }[]; me: string }) {
   const yet = everyone.filter((m) => m.id !== me && !loved.some((l) => l.id === m.id)).map((m) => m.name);
   return (
@@ -47,7 +49,7 @@ function HeartRoll({ loved, everyone, me }: { loved: { id: string; name: string 
           <span>Loved by {listNames(loved.map((m) => (m.id === me ? 'you' : m.name)))}</span>
         </div>
       ) : null}
-      {yet.length ? <p>Not hearted yet: {listNames(yet)}</p> : null}
+      {yet.length ? <p>Not loved yet by {listNames(yet)}</p> : null}
     </div>
   );
 }
@@ -55,6 +57,7 @@ function HeartRoll({ loved, everyone, me }: { loved: { id: string; name: string 
 /** Two to four designs side by side, all on the same shirt, with everyone's hearts. */
 function Compare() {
   const params = useSearchParams();
+  const desktop = useDesktop();
   const router = useRouter();
   const { state, option, myReaction, otherLoves, react, lovers, members } = useProject();
   const [prefs, setPrefs] = usePrefs();
@@ -89,8 +92,15 @@ function Compare() {
   if (designs.length < 2) {
     return (
       <div className="animate-pop pt-6 text-center">
-        <PageTitle title="Pick a few to compare" sub="Choose two to four designs in Favorites, then compare them side by side." />
-        <LinkButton href={`${base}/favorites`} icon="star">
+        <PageTitle
+          title="Pick a few to compare"
+          sub={
+            desktop
+              ? 'In Favorites, hover over a design and pick two to four with the compare button, then compare them side by side.'
+              : 'In Favorites, tap Select to compare and pick two to four, then compare them side by side.'
+          }
+        />
+        <LinkButton href={`${base}/favorites`} icon="heart">
           Go to Favorites
         </LinkButton>
       </div>
@@ -128,7 +138,7 @@ function Compare() {
           const mine = myReaction(o.id);
           return (
             <article key={o.id} className="w-[calc(50%-6px)] shrink-0 snap-start overflow-hidden rounded-3xl bg-white shadow-[var(--shadow-card)] lg:w-auto">
-              <Link href={`${base}/o/${o.id}`} className="block bg-sand-2/60 px-3 pt-3" aria-label={`Look closer: ${describeDesign(o)}`}>
+              <Link href={designHref(base, o.id, 'compare')} className="block bg-sand-2/60 px-3 pt-3" aria-label={`Look closer: ${describeDesign(o)}`}>
                 <ShirtPreview design={o.payload} copy={o.payload.copyOverride ?? state.project.brief.copy} style={prefs.style} color={prefs.color} view={view} />
               </Link>
               <div className="p-3 lg:p-4">
@@ -136,7 +146,7 @@ function Compare() {
                 <p className="mt-1.5 text-[13px] leading-snug text-muted">{describeDesign(o)}</p>
                 {/* The badges already say when they love it; say when they haven't. */}
                 {members <= 2 ? (
-                  otherLoves(o.id) ? null : <p className="mt-2 text-sm text-muted">{other} hasn&apos;t hearted it yet</p>
+                  otherLoves(o.id) ? null : <p className="mt-2 text-sm text-muted">{other} doesn&apos;t love it yet</p>
                 ) : (
                   <HeartRoll loved={lovers(o.id)} everyone={state.members} me={state.me.id} />
                 )}

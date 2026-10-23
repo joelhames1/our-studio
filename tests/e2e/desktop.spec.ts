@@ -47,7 +47,7 @@ test.describe('on a laptop', () => {
     expect(preview.x + preview.width).toBeLessThan(controls.x);
 
     // A panel opens down the right-hand side, over the controls but not the design.
-    await page.getByRole('button', { name: 'Change something' }).click();
+    await page.getByRole('button', { name: 'Change it' }).click();
     const drawer = page.locator('.sheet-panel');
     const box = (await drawer.boundingBox())!;
     expect(box.x).toBeGreaterThan(900);
@@ -107,7 +107,7 @@ test('a phone keeps its own layout', async ({ page }) => {
   await page.goto(`${PROJECT}/browse`);
   await page.getByRole('link', { name: 'Look closer' }).click();
   await expect(page).toHaveURL(/\/o\//);
-  await page.getByRole('button', { name: 'Change something' }).click();
+  await page.getByRole('button', { name: 'Change it' }).click();
   const box = (await page.locator('.sheet-panel').boundingBox())!;
   // The full width of the screen (give or take its pop-in animation), at the bottom.
   expect(box.x).toBeLessThan(10);

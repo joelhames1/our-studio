@@ -80,6 +80,9 @@ function Line({ e, me, live, known }: { e: ActivityEntry; me: User; live: Set<st
       text = <>{who} {look.verb} {e.detail ?? 'someone'}</>;
       break;
     case 'joined':
+      // Whoever starts a household joins it first; that's one thing, not two.
+      text = e.detail === 'and started it' ? <>{who} started the household</> : <>{who} joined the household {e.detail ? <span className="text-muted">· {e.detail}</span> : null}</>;
+      break;
     case 'left':
     case 'account-closed':
     case 'account-deleted':
@@ -138,7 +141,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
       <Link href={project ? `/p/${project.id}` : '/'} className="mb-4 inline-flex items-center gap-1 text-sm text-muted lg:hidden">
         <Icon name="chevronLeft" size={16} /> {project ? project.title : 'Home'}
       </Link>
-      <h1 className="font-display text-[30px] leading-tight font-semibold">{projectId ? 'History' : 'Activity'}</h1>
+      <h1 className="font-display text-[30px] leading-tight font-semibold">Activity</h1>
       <p className="mb-6 mt-1 text-muted">
         {projectId
           ? `Everything that's happened to ${name ? `“${name}”` : 'this project'}, newest first.`

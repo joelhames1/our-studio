@@ -69,7 +69,7 @@ export interface CallTiming {
 
 /** Kinds of call, by how their spending note starts, with what each should usually take. */
 const KINDS: [match: RegExp, label: string, targetMs: number | null][] = [
-  [/^design tweak\b/, 'Change something (reading the request)', 20_000],
+  [/^design tweak\b/, 'Change it (reading the request)', 20_000],
   [/^word ideas\b/, 'Word ideas', 25_000],
   [/^artwork:/, 'A painting', 90_000],
   [/^printer search\b/, 'Printer search', 180_000],

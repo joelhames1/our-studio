@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { ADMIN, getUser } from '@/lib/server/auth';
 import { getHousehold, membersOf, nameOf, needsWelcome } from '@/lib/server/people';
 import { config } from '@/lib/server/config';
@@ -10,6 +11,7 @@ import { DatabaseUnreachable, SetupNeeded } from '@/lib/server/repo';
 import { approverOf } from '@/lib/server/studio';
 import { Greeting } from '@/components/Greeting';
 import { helloIn, TZ_COOKIE } from '@/lib/engine/greeting';
+import { safeNext } from '@/lib/engine/paths';
 import { EmailCode } from '@/components/EmailCode';
 import { GoogleMark } from '@/components/GoogleMark';
 import { HomeProjectCard } from '@/components/HomeProjectCard';
@@ -23,12 +25,13 @@ import { WelcomeCard } from '@/components/WelcomeCard';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ signin?: string | string[] }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ signin?: string | string[]; next?: string | string[] }> }) {
   const user = await getUser();
-  if (!user) {
-    const { signin } = await searchParams;
-    return <Welcome refusal={REFUSALS.find((r) => r === signin)} />;
-  }
+  const { signin, next: asked } = await searchParams;
+  const next = safeNext(asked);
+  if (!user) return <Welcome refusal={REFUSALS.find((r) => r === signin)} next={next} />;
+  // Signed in on the way to somewhere: go there.
+  if (next) redirect(next);
 
   let projects: ProjectSummary[] = [];
   let archived = 0;
@@ -150,11 +153,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
 
       <div className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 lg:justify-start">
         {archived ? (
-          <Link prefetch={false} href="/archived" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline">
+          <Link prefetch={false} href="/archived" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline lg:hidden">
             <Icon name="archive" size={16} /> Archived ({archived})
           </Link>
         ) : null}
-        <Link prefetch={false} href="/activity" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline">
+        {/* On a laptop Activity is in the sidebar. */}
+        <Link prefetch={false} href="/activity" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline lg:hidden">
           <Icon name="clock" size={16} /> Activity
         </Link>
         <Link prefetch={false} href="/household" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline lg:hidden">
@@ -259,7 +263,7 @@ function FirstVisit({ alone }: { alone: boolean }) {
 const ABOUT = [
   {
     icon: 'heart',
-    text: 'Swipe through designs made for your occasion (a trip, a birthday, a graduation), heart the ones you like, and see the ones everyone loves.',
+    text: 'Swipe through designs made for your occasion (a trip, a birthday, a graduation), love the ones you like, and see the ones everyone loves.',
   },
   {
     icon: 'wand',
@@ -271,7 +275,7 @@ const ABOUT = [
   },
 ];
 
-function Welcome({ refusal }: { refusal?: Refusal }) {
+function Welcome({ refusal, next }: { refusal?: Refusal; next: string | null }) {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col px-6 pb-8 pt-16">
       <div className="flex flex-1 flex-col justify-center">
@@ -282,18 +286,22 @@ function Welcome({ refusal }: { refusal?: Refusal }) {
           <p role="alert" className="mt-6 rounded-2xl bg-coral-soft px-4 py-3 text-[15px] text-coral">
             {REFUSED[refusal]}
           </p>
+        ) : next ? (
+          <p className="mt-6 rounded-2xl bg-white px-4 py-3 text-[15px] shadow-[var(--shadow-card)]">
+            {next.startsWith('/p/') ? 'Sign in to open that project. You’ll go straight there.' : 'Sign in to carry on. You’ll go straight back to that page.'}
+          </p>
         ) : null}
         {config.googleSignIn ? (
           // A plain link, not a form: the trip to Google is a redirect, which the page's form rules would block.
           <a
-            href="/api/auth/google"
+            href={next ? `/api/auth/google?next=${encodeURIComponent(next)}` : '/api/auth/google'}
             className="mt-8 flex h-12 items-center justify-center gap-3 rounded-full bg-white text-[16px] font-medium shadow-[var(--shadow-card)] ring-1 ring-line transition hover:ring-ink/20 active:scale-[0.98]"
           >
             <GoogleMark />
             Continue with Google
           </a>
         ) : null}
-        {config.emailCodes ? <EmailCode folded={config.googleSignIn} /> : null}
+        {config.emailCodes ? <EmailCode folded={config.googleSignIn} next={next ?? undefined} /> : null}
         {config.devLogin ? null : config.linksConfigured ? (
           config.googleSignIn || config.emailCodes ? (
             <p className="mt-4 text-center text-sm text-muted">Or open the personal link you were sent.</p>

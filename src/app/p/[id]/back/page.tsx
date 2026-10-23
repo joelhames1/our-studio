@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useMemo, useRef, useState } from 'react';
 import { BackPreview } from '@/components/BackPreview';
-import { backName } from '@/components/BackMeta';
+import { useBackName } from '@/components/BackMeta';
 import { FactsSheet } from '@/components/FactsSheet';
 import { Icon } from '@/components/Icon';
 import { otherName, useProject } from '@/components/ProjectProvider';
@@ -13,10 +13,11 @@ import { usePrefs } from '@/lib/client/prefs';
 import type { BackTemplateId } from '@/lib/design/back/types';
 import type { BackOption } from '@/lib/server/studio';
 import { heartBadge, listNames, sharedCount } from '@/lib/engine/together';
+import { backHref } from '@/lib/engine/paths';
 
 const FILTERS: { id: string; label: string; templates?: BackTemplateId[] }[] = [
   { id: 'all', label: 'All' },
-  { id: 'hearts', label: 'Hearted' },
+  { id: 'hearts', label: 'Loved' },
   { id: 'travel', label: 'Travel', templates: ['flight-path', 'tour-dates', 'coordinates'] },
   { id: 'milestones', label: 'Milestones', templates: ['numbers', 'timeline', 'established'] },
   { id: 'people', label: 'People', templates: ['jersey', 'crew'] },
@@ -25,6 +26,7 @@ const FILTERS: { id: string; label: string; templates?: BackTemplateId[] }[] = [
 
 export default function BackPage() {
   const { state, backs, backMatches, referenceFront, myReaction, otherLoves, react, remixBacks, wearer, lovers, members } = useProject();
+  const backName = useBackName();
   const [prefs] = usePrefs();
   const [filter, setFilter] = useState('all');
   const [editing, setEditing] = useState(false);
@@ -50,7 +52,7 @@ export default function BackPage() {
     ) as Record<string, BackOption[]>;
   }, [backs, myReaction, otherLoves]);
   const list = filtered[filter] ?? filtered.all;
-  // Only offer filters that have something in them (All and Hearted always show).
+  // Only offer filters that have something in them (All and Loved always show).
   const chips = FILTERS.filter((f) => f.id === 'all' || f.id === 'hearts' || filtered[f.id].length);
 
   const more = async () => {
@@ -70,14 +72,13 @@ export default function BackPage() {
   return (
     <div className="animate-pop">
       <PageTitle
-        kicker="Step 4"
-        title="The back"
+        title="The back print"
         sub={
           backMatches.length
             ? members <= 2
               ? `${backMatches.length} back${backMatches.length === 1 ? '' : 's'} you and ${other} both love, up top.`
               : `${sharedCount(backMatches.length, members)}, up top.`
-            : 'Something for the back, or nothing at all. Heart the ones you like.'
+            : 'Something for the back, or nothing at all. Love the ones you like.'
         }
       />
 
@@ -112,7 +113,7 @@ export default function BackPage() {
             const badge = heartBadge(lovers(o.id).length, members);
             return (
               <div key={o.id} className={`relative overflow-hidden rounded-3xl bg-white shadow-[var(--shadow-card)] ${mine === 'pass' ? 'opacity-55' : ''}`}>
-                <Link href={`${base}/b/${o.id}`} className="block transition active:scale-[0.98]" aria-label={backName(o)}>
+                <Link href={backHref(base, o.id)} className="block transition active:scale-[0.98]" aria-label={backName(o)}>
                   <div className="bg-sand-2/60 px-3 pt-3">
                     {front ? (
                       <BackPreview back={o.payload} facts={state.facts} front={front} copy={copy} style={prefs.style} color={prefs.color} wearer={wearer} label={backName(o)} />
@@ -122,7 +123,7 @@ export default function BackPage() {
                 </Link>
                 <button
                   onClick={() => heart(o)}
-                  aria-label={mine === 'love' ? `Unheart ${backName(o)}` : `Heart ${backName(o)}`}
+                  aria-label={`Love ${backName(o)}`}
                   aria-pressed={mine === 'love'}
                   className={`absolute bottom-2 right-2 flex h-10 w-10 items-center justify-center rounded-full shadow-[var(--shadow-card)] transition active:scale-90 ${mine === 'love' ? 'bg-coral text-white' : 'bg-white text-coral'}`}
                 >
@@ -145,13 +146,15 @@ export default function BackPage() {
 
       <div className="mt-6 grid grid-cols-2 gap-2 lg:mx-auto lg:max-w-lg">
         <Button variant="secondary" icon="sparkles" onClick={more} busy={busy}>
-          More back ideas
+          More ideas
         </Button>
         <Button variant="secondary" icon="type" onClick={() => setEditing(true)}>
           Edit the details
         </Button>
       </div>
-      <p className="mt-3 text-center text-xs text-muted">The route, names, numbers and dates live in the details. Change them once and every back updates.</p>
+      <p className="mt-3 text-center text-xs text-muted">
+        {state.occasions.includes('trip') ? 'The route, names, numbers and dates' : 'Names, numbers and dates'} live in the details. Change them once and every back updates.
+      </p>
 
       <FactsSheet open={editing} onClose={() => setEditing(false)} />
     </div>

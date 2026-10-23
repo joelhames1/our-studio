@@ -9,6 +9,8 @@ import { DesignBadges, describeDesign } from '@/components/DesignMeta';
 import { TweakForm, TweakSheet } from '@/components/TweakSheet';
 import { ViewButton } from '@/components/ViewSheet';
 import { NewArtButton } from '@/components/NewArtButton';
+import { StyleChips } from '@/components/StylePicker';
+import { designHref } from '@/lib/engine/paths';
 import { Icon } from '@/components/Icon';
 import { BottomBar, Button, LinkButton } from '@/components/ui';
 import { toast } from '@/components/Toast';
@@ -16,7 +18,7 @@ import { onShortcut } from '@/lib/client/keys';
 import { useDesktop } from '@/lib/client/media';
 import { flatView, usePrefs } from '@/lib/client/prefs';
 import { loadSwipes, MAX_SWIPES, saveSwipes, type Swipe } from '@/lib/client/swipes';
-import type { Copy } from '@/lib/design/types';
+import { CANVAS, type Copy } from '@/lib/design/types';
 import type { ReactionValue } from '@/lib/engine/types';
 import type { ShirtOption } from '@/lib/server/studio';
 
@@ -46,6 +48,11 @@ export default function BrowsePage() {
   useEffect(() => {
     setHistory(loadSwipes(projectId));
   }, [projectId]);
+  // A phone scrolled down to the buttons starts each new card back at the top, so it's seen whole.
+  const topId = top?.id;
+  useEffect(() => {
+    if (topId && !desktop && window.scrollY > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [topId, desktop]);
   const remember = (list: Swipe[]) => {
     const trimmed = list.slice(-MAX_SWIPES);
     setHistory(trimmed);
@@ -62,7 +69,7 @@ export default function BrowsePage() {
   const reactTo = (o: ShirtOption, value: ReactionValue) => {
     push([{ id: o.id, value }]);
     react(o.id, value).catch((e) => toast((e as Error).message, 'error'));
-    if (value === 'love') toast('Hearted ♥');
+    if (value === 'love') toast('Loved ♥');
   };
 
   const act = (value: ReactionValue) => {
@@ -74,11 +81,11 @@ export default function BrowsePage() {
       setDrag(0);
       remember([...history, { id: option.id, value }]);
       react(option.id, value).catch((e) => toast((e as Error).message, 'error'));
-      if (value === 'love') toast('Hearted ♥');
+      if (value === 'love') toast('Loved ♥');
     }, 230);
   };
 
-  // Steps back through recent swipes. One you've since changed elsewhere (hearted
+  // Steps back through recent swipes. One you've since changed elsewhere (loved
   // it from Favorites, say) is skipped rather than undone.
   const undo = async () => {
     const rest = [...history];
@@ -121,7 +128,7 @@ export default function BrowsePage() {
     const tap = start.current && Math.abs(e.clientX - start.current.x) < 6 && Math.abs(e.clientY - start.current.y) < 6;
     start.current = null;
     setDragging(false);
-    if (tap && top) return router.push(`${base}/o/${top.id}`);
+    if (tap && top) return router.push(designHref(base, top.id, 'browse'));
     if (drag > THRESHOLD) act('love');
     else if (drag < -THRESHOLD) act('pass');
     else setDrag(0);
@@ -145,7 +152,7 @@ export default function BrowsePage() {
         P: () => act('pass'),
         z: () => canUndo && void undo(),
         Z: () => canUndo && void undo(),
-        Enter: () => top && router.push(`${base}/o/${top.id}`),
+        Enter: () => top && router.push(designHref(base, top.id, 'browse')),
       };
       const run = keys[e.key];
       if (!run) return false;
@@ -161,7 +168,9 @@ export default function BrowsePage() {
           <Icon name="check" size={36} />
         </div>
         <h1 className="font-display text-[28px] font-semibold">You&apos;ve seen them all</h1>
-        <p className="mx-auto mt-2 max-w-sm text-muted">Want more? Fresh ideas are instant. New artwork takes about half a minute.</p>
+        <p className="mx-auto mt-2 max-w-sm text-muted">
+          Want more? Fresh ideas are instant.{state.ai.art ? ' New artwork takes about half a minute.' : ''}
+        </p>
         {canUndo || passed ? (
           <div className="mx-auto mt-4 flex max-w-sm flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
             {canUndo ? (
@@ -181,9 +190,12 @@ export default function BrowsePage() {
             Fresh ideas
           </Button>
           <NewArtButton />
-          <LinkButton href={`${base}/favorites`} variant="secondary" size="lg" icon="star">
+          <LinkButton href={`${base}/favorites`} variant="secondary" size="lg" icon="heart">
             See favorites
           </LinkButton>
+        </div>
+        <div className="mx-auto mt-8 max-w-sm text-left">
+          <StyleChips title="Want a different style?" />
         </div>
       </div>
     );
@@ -219,23 +231,33 @@ export default function BrowsePage() {
   const exitY = exit === 'maybe' ? -500 : 0;
   const dx = exit ? exitX : drag;
   const rotate = dx / 18;
+  const view = flatView(prefs.view);
+  // The card is as wide as fits, and never so tall that its buttons drop below
+  // the reactions: height over width for each view, plus the card's padding.
+  const tall = view === 'full' ? 0.76 : view === 'art' ? (CANVAS.h + 120) / (CANVAS.w + 120) : 1.1;
+  const cardWidth = `min(${prefs.view === 'full' ? 560 : 440}px, calc((100dvh - 26rem) / ${tall.toFixed(3)} + 3rem))`;
 
   return (
     <div className="lg:grid lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-start lg:gap-10">
       <div>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm text-muted">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <span className="flex items-center gap-3 text-sm text-muted">
             {deck.length} to look at
+            {canUndo ? (
+              <button onClick={undo} aria-label="Undo last swipe" className="inline-flex items-center gap-1 font-medium text-lagoon">
+                <Icon name="undo" size={15} /> Undo
+              </button>
+            ) : null}
           </span>
           {mode}
           <ViewButton />
         </div>
 
-        <div className="relative mx-auto" style={{ maxWidth: prefs.view === 'full' ? 560 : 440 }}>
+        <div className="relative mx-auto" style={{ maxWidth: cardWidth }}>
           {next ? (
             <div className="absolute inset-0 translate-y-3 scale-[0.95] rounded-[28px] bg-white opacity-70 shadow-[var(--shadow-card)]" aria-hidden="true">
               <div className="px-6 pt-6 opacity-60">
-                <ShirtPreview design={next.payload} copy={copyOf(next)} style={prefs.style} color={prefs.color} view={flatView(prefs.view)} />
+                <ShirtPreview design={next.payload} copy={copyOf(next)} style={prefs.style} color={prefs.color} view={view} />
               </div>
             </div>
           ) : null}
@@ -256,47 +278,39 @@ export default function BrowsePage() {
               setDrag(0);
             }}
           >
-            <div className="relative overflow-hidden rounded-t-[28px] bg-gradient-to-b from-sand-2/60 to-white px-6 pt-6">
-              <ShirtPreview design={top.payload} copy={copyOf(top)} style={prefs.style} color={prefs.color} view={flatView(prefs.view)} />
+            <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-b from-sand-2/60 to-white px-6 pt-6 lg:rounded-b-none">
+              <ShirtPreview design={top.payload} copy={copyOf(top)} style={prefs.style} color={prefs.color} view={view} />
               {/* On a phone the badges ride on the card, where "Erin loves this" is seen before voting: below it, they'd be under the buttons. */}
               <div className="pointer-events-none absolute left-4 top-4 max-w-[55%] lg:hidden">
                 <DesignBadges option={top} className="flex flex-col items-start gap-1.5" />
               </div>
             </div>
-            {/* On a laptop these sit in the panel beside the card. */}
-            <p className="px-5 pb-4 pt-3 text-[13px] text-muted lg:hidden">{describeDesign(top)}</p>
             <Stamp show={dx > 30} text="Love" className="left-5 -rotate-12 border-coral text-coral" opacity={Math.min(1, dx / THRESHOLD)} />
             <Stamp show={dx < -30} text="Pass" className="right-5 rotate-12 border-ink text-ink" opacity={Math.min(1, -dx / THRESHOLD)} />
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap justify-center gap-2 lg:hidden">
-          <Button variant="secondary" size="sm" icon="layers" onClick={() => more(top.id)} busy={busy === 'more'}>
+        {/* On a phone: everything else you can do with this one, in reach without scrolling. */}
+        <div className="mx-auto mt-3 grid grid-cols-3 gap-2 lg:hidden" style={{ maxWidth: 440 }}>
+          <Button variant="secondary" size="sm" icon="layers" onClick={() => more(top.id)} busy={busy === 'more'} className={COMPACT}>
             More like this
           </Button>
-          <Button variant="secondary" size="sm" icon="wand" onClick={() => setTweaking(true)}>
-            Change something
+          <Button variant="secondary" size="sm" icon="wand" onClick={() => setTweaking(true)} className={COMPACT}>
+            Change it
           </Button>
-          <LinkButton href={`${base}/o/${top.id}`} variant="secondary" size="sm" icon="zoom">
+          <LinkButton href={designHref(base, top.id, 'browse')} variant="secondary" size="sm" icon="zoom" className={COMPACT}>
             Look closer
           </LinkButton>
         </div>
 
-        <BottomBar>
-          <div className="relative">
-            {canUndo ? (
-              <button onClick={undo} aria-label="Undo last swipe" className="absolute -top-1 left-0 inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-3 text-sm text-muted ring-1 ring-line">
-                <Icon name="undo" size={15} /> Undo
-              </button>
-            ) : null}
-            <ReactionButtons onReact={act} keyHints />
-            <p className="mt-2 text-center text-xs text-muted">
-              <span className="lg:hidden">Swipe right to love, left to pass</span>
-              <span className="hidden lg:inline">
-                Keys: <Kbd>←</Kbd> pass · <Kbd>↓</Kbd> maybe · <Kbd>→</Kbd> love · <Kbd>Z</Kbd> undo · <Kbd>Enter</Kbd> look closer
-              </span>
-            </p>
-          </div>
+        <BottomBar className="!mt-4">
+          <ReactionButtons onReact={act} keyHints />
+          <p className="mt-2 text-center text-xs text-muted">
+            <span className="lg:hidden">Swipe right to love, left to pass. Tap the shirt to look closer.</span>
+            <span className="hidden lg:inline">
+              Keys: <Kbd>←</Kbd> pass · <Kbd>↓</Kbd> maybe · <Kbd>→</Kbd> love · <Kbd>Z</Kbd> undo · <Kbd>Enter</Kbd> look closer
+            </span>
+          </p>
         </BottomBar>
       </div>
 
@@ -309,13 +323,13 @@ export default function BrowsePage() {
               <Button variant="secondary" size="sm" icon="layers" onClick={() => more(top.id)} busy={busy === 'more'}>
                 More like this
               </Button>
-              <LinkButton href={`${base}/o/${top.id}`} variant="secondary" size="sm" icon="zoom">
+              <LinkButton href={designHref(base, top.id, 'browse')} variant="secondary" size="sm" icon="zoom">
                 Look closer
               </LinkButton>
             </div>
           </section>
           <section className="rounded-3xl bg-white p-5 shadow-[var(--shadow-card)]">
-            <h2 className="mb-1 font-display text-lg font-semibold">Change something</h2>
+            <h2 className="mb-1 font-display text-lg font-semibold">What should change?</h2>
             <TweakForm key={top.id} option={top} inline />
           </section>
           {deck.length > 1 ? (
@@ -325,7 +339,7 @@ export default function BrowsePage() {
                 {deck.slice(1, 5).map((o) => (
                   <Link
                     key={o.id}
-                    href={`${base}/o/${o.id}`}
+                    href={designHref(base, o.id, 'browse')}
                     aria-label={`Up next: ${describeDesign(o)}`}
                     className="overflow-hidden rounded-2xl bg-white px-1.5 pt-1.5 shadow-[var(--shadow-card)] transition hover:shadow-[var(--shadow-lift)]"
                   >
@@ -335,6 +349,9 @@ export default function BrowsePage() {
               </div>
             </section>
           ) : null}
+          <section className="rounded-3xl bg-white p-5 shadow-[var(--shadow-card)]">
+            <StyleChips />
+          </section>
         </aside>
       ) : null}
 
@@ -342,6 +359,9 @@ export default function BrowsePage() {
     </div>
   );
 }
+
+/** Three buttons in a row on a phone: icon above a one-line label. */
+const COMPACT = 'h-auto min-h-14 flex-col gap-1 rounded-2xl px-1 py-2 text-[13px] whitespace-nowrap';
 
 /** "One at a time" or "Grid", on a laptop. Hands focus back so the arrow keys keep working. */
 function BrowseMode({ grid, onChange }: { grid: boolean; onChange: (grid: boolean) => void }) {

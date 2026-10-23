@@ -228,7 +228,7 @@ export interface PersonRow {
   admin: boolean;
 }
 
-/** Everyone, for Setup → People, and households nobody's in any more. */
+/** Everyone, for All households → People, and households nobody's in any more. */
 export async function peopleOverview(admin: User): Promise<{
   people: PersonRow[];
   empty: { id: string; name: string; createdAt: string; projects: number }[];

@@ -4,6 +4,8 @@ import type { BackSize, BackTemplateId, FactKey, Occasion } from '../types';
 export interface BackTemplate {
   id: BackTemplateId;
   name: string;
+  /** What it's called on particular occasions ("Class of" on a graduation), when the plain name doesn't fit. */
+  names?: Partial<Record<Occasion, string>>;
   blurb: string;
   /** Occasions this template suits; drives what's suggested first. */
   occasions: Occasion[];

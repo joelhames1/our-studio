@@ -7,8 +7,9 @@ import { Button } from './ui';
  * "Email me a code" on the sign-in screen: an address, then the six digits
  * from the email. Folded away under Google's button when that's on too. On an
  * invite, `beforeSend` saves the name they gave first, and any address gets a code.
+ * `next` is the page they were on their way to, checked by the welcome page.
  */
-export function EmailCode({ folded, beforeSend, invited = false }: { folded: boolean; beforeSend?: () => Promise<void>; invited?: boolean }) {
+export function EmailCode({ folded, beforeSend, invited = false, next }: { folded: boolean; beforeSend?: () => Promise<void>; invited?: boolean; next?: string }) {
   const [step, setStep] = useState<'closed' | 'email' | 'code'>(folded ? 'closed' : 'email');
   const [email, setEmail] = useState('');
   const [sentTo, setSentTo] = useState('');
@@ -38,8 +39,8 @@ export function EmailCode({ folded, beforeSend, invited = false }: { folded: boo
     setError('');
     try {
       await http('/api/auth/code/check', { body: { code } });
-      // A full load, so the server draws the signed-in home (or the AI welcome).
-      window.location.assign('/');
+      // A full load, so the server draws the signed-in page (or the AI welcome).
+      window.location.assign(next ?? '/');
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -68,6 +69,7 @@ export function EmailCode({ folded, beforeSend, invited = false }: { folded: boo
             type="email"
             autoComplete="email"
             inputMode="email"
+            placeholder="you@example.com"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}

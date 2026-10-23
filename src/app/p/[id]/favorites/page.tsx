@@ -5,14 +5,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { otherName, useProject } from '@/components/ProjectProvider';
 import { ShirtPreview } from '@/components/ShirtPreview';
 import { BackPreview } from '@/components/BackPreview';
-import { backName } from '@/components/BackMeta';
+import { useBackName } from '@/components/BackMeta';
 import { Icon } from '@/components/Icon';
 import { ComparePill, compareToggle } from '@/components/Compare';
 import { ReactionButtons } from '@/components/Reactions';
 import { toast } from '@/components/Toast';
 import { useDesignArchive, useWho, When } from '@/components/ArchiveBits';
 import { BottomBar, Button, LinkButton, PageTitle } from '@/components/ui';
-import { useCompare } from '@/lib/client/compare';
+import { compareHref, setCompare, useCompare } from '@/lib/client/compare';
+import { backHref, designHref } from '@/lib/engine/paths';
 import { useDesktop } from '@/lib/client/media';
 import { usePrefs } from '@/lib/client/prefs';
 import type { OptionRecord } from '@/lib/engine/types';
@@ -25,6 +26,7 @@ const TABS: Tab[] = ['both', 'mine', 'theirs', 'maybe', 'passed', 'archived'];
 
 export default function FavoritesPage() {
   const { state, matches, myReaction, otherLoves, backs, referenceFront, wearer, lovers, members } = useProject();
+  const backName = useBackName();
   const [prefs] = usePrefs();
   const other = otherName(state);
   const groups = useMemo(() => {
@@ -40,7 +42,17 @@ export default function FavoritesPage() {
   }, [state.options, state.archived, matches, myReaction, otherLoves, lovers]);
   const asked = useSearchParams().get('tab') as Tab | null;
   const firstTab: Tab =
-    asked && TABS.includes(asked) ? asked : groups.both.length ? 'both' : groups.mine.length ? 'mine' : groups.theirs.length ? 'theirs' : 'maybe';
+    asked && TABS.includes(asked)
+      ? asked
+      : groups.both.length
+        ? 'both'
+        : groups.mine.length
+          ? 'mine'
+          : groups.theirs.length
+            ? 'theirs'
+            : groups.maybe.length
+              ? 'maybe'
+              : 'mine';
   const [tab, setTab] = useState<Tab>(firstTab);
   const tabRow = useRef<HTMLDivElement>(null);
   // Arriving on a tab off the end of the row (Archived, say) scrolls it into view; a visible one stays put.
@@ -54,12 +66,16 @@ export default function FavoritesPage() {
     else if (b.left < r.left) row.scrollLeft -= r.left - b.left + 16;
   }, [tab]);
   const base = `/p/${state.project.id}`;
+  const desktop = useDesktop();
+  // On a phone there's no hovering, so comparing starts with a Select mode.
+  const [selecting, setSelecting] = useState(false);
+  const picked = useCompare(state.project.id);
 
   const allTabs: { id: Tab; label: string; n: number }[] = [
     { id: 'both', label: sharedTitle(members), n: groups.both.length },
-    { id: 'mine', label: 'Your hearts', n: groups.mine.length },
-    { id: 'theirs', label: members <= 2 ? `${other}'s hearts` : 'Others’ hearts', n: groups.theirs.length },
-    { id: 'maybe', label: 'Maybes', n: groups.maybe.length },
+    { id: 'mine', label: 'You love', n: groups.mine.length },
+    { id: 'theirs', label: members <= 2 ? `${other} loves` : 'Others love', n: groups.theirs.length },
+    { id: 'maybe', label: 'Maybe', n: groups.maybe.length },
     { id: 'passed', label: 'Passed', n: groups.passed.length },
     // Shared, unlike the rest: only there once something's been put away.
     ...(state.archived.length + state.archivedBacks.length || tab === 'archived'
@@ -82,20 +98,19 @@ export default function FavoritesPage() {
   return (
     <div className="animate-pop">
       <PageTitle
-        kicker="Step 5"
         title="Favorites"
         sub={
           members === 1
             ? groups.mine.length
               ? `${groups.mine.length} design${groups.mine.length === 1 ? '' : 's'} you love so far. Invite people from Household, and the ones you all love come first.`
-              : 'Heart designs in Browse and they collect here. Invite people from Household to decide together.'
+              : 'Love designs in Browse and they collect here. Invite people from Household to decide together.'
             : members === 2
               ? groups.both.length
                 ? `${groups.both.length} design${groups.both.length === 1 ? '' : 's'} you and ${other} both love. Those float to the top.`
-                : `When you and ${other} both heart a design, it shows up here first.`
+                : `When you and ${other} both love a design, it shows up here first.`
               : groups.both.length
                 ? `${groups.both.length} design${groups.both.length === 1 ? '' : 's'} you and others love, the most-loved first.`
-                : 'When you and someone else heart the same design, it shows up here first.'
+                : 'When you and someone else love the same design, it shows up here first.'
         }
       />
       <div ref={tabRow} className="-mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]">
@@ -112,6 +127,22 @@ export default function FavoritesPage() {
         ))}
       </div>
 
+      {!desktop && tab !== 'archived' && list.length >= 2 ? (
+        <div className="mb-3 flex items-center justify-between gap-3 text-sm">
+          <span className="text-muted">{selecting ? `Tap two to four to compare${picked.length ? ` · ${picked.length} picked` : ''}` : ''}</span>
+          <button
+            type="button"
+            onClick={() => {
+              if (selecting) setCompare(state.project.id, []);
+              setSelecting(!selecting);
+            }}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-white px-3.5 font-medium ring-1 ring-line"
+          >
+            <Icon name={selecting ? 'x' : 'grid'} size={15} /> {selecting ? 'Cancel' : 'Select to compare'}
+          </button>
+        </div>
+      ) : null}
+
       {tab === 'passed' && (list.length || backList.length) ? (
         <p className="mb-4 rounded-2xl bg-white/70 px-4 py-3 text-sm text-muted ring-1 ring-line">
           Only you can see these. Open one and tap a heart or maybe to bring it back.
@@ -126,7 +157,7 @@ export default function FavoritesPage() {
       {tab === 'archived' && list.length ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5 xl:grid-cols-5">
           {list.map((o) => (
-            <ArchivedCard key={o.id} o={o} href={`${base}/o/${o.id}`}>
+            <ArchivedCard key={o.id} o={o} href={designHref(base, o.id, 'favorites')}>
               <ShirtPreview design={o.payload} copy={o.payload.copyOverride ?? state.project.brief.copy} style={prefs.style} color={prefs.color} />
             </ArchivedCard>
           ))}
@@ -134,13 +165,21 @@ export default function FavoritesPage() {
       ) : list.length ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5 xl:grid-cols-5">
           {list.map((o) => (
-            <FavCard key={o.id} o={o} base={base} style={prefs.style} color={prefs.color} badge={myReaction(o.id) === 'love' && otherLoves(o.id) ? heartBadge(lovers(o.id).length, members) : null} />
+            <FavCard
+              key={o.id}
+              o={o}
+              base={base}
+              style={prefs.style}
+              color={prefs.color}
+              selecting={selecting && !desktop}
+              badge={myReaction(o.id) === 'love' && otherLoves(o.id) ? heartBadge(lovers(o.id).length, members) : null}
+            />
           ))}
         </div>
       ) : (
         <div className="rounded-3xl bg-white p-8 text-center text-muted shadow-[var(--shadow-card)]">
           {tab === 'theirs'
-            ? `Nothing from ${other} you haven't already hearted.`
+            ? `Nothing from ${other} you don't already love.`
             : tab === 'passed'
               ? 'You haven’t passed on anything.'
               : tab === 'archived'
@@ -160,12 +199,12 @@ export default function FavoritesPage() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5 xl:grid-cols-5">
             {tab === 'archived'
               ? backList.map((o) => (
-                  <ArchivedCard key={o.id} o={o} href={`${base}/b/${o.id}`} name={backName(o)}>
+                  <ArchivedCard key={o.id} o={o} href={backHref(base, o.id, 'favorites')} name={backName(o)}>
                     <BackPreview back={o.payload} facts={state.facts} front={front} copy={front.copyOverride ?? state.project.brief.copy} style={prefs.style} color={prefs.color} wearer={wearer} label={backName(o)} />
                   </ArchivedCard>
                 ))
               : backList.map((o) => (
-              <Link key={o.id} href={`${base}/b/${o.id}`} className="relative block overflow-hidden rounded-3xl bg-white shadow-[var(--shadow-card)] transition active:scale-[0.98]">
+              <Link key={o.id} href={backHref(base, o.id, 'favorites')} className="relative block overflow-hidden rounded-3xl bg-white shadow-[var(--shadow-card)] transition active:scale-[0.98]">
                 <div className="bg-sand-2/60 px-3 pt-3">
                   <BackPreview back={o.payload} facts={state.facts} front={front} copy={front.copyOverride ?? state.project.brief.copy} style={prefs.style} color={prefs.color} wearer={wearer} label={backName(o)} />
                 </div>
@@ -176,10 +215,22 @@ export default function FavoritesPage() {
         </>
       ) : null}
 
-      {state.canApprove && groups.both.length + groups.mine.length > 0 && state.project.status !== 'approved' ? (
+      {selecting && !desktop ? (
+        <BottomBar>
+          {picked.length >= 2 ? (
+            <LinkButton href={compareHref(state.project.id, picked)} size="lg" className="w-full" icon="grid">
+              Compare {picked.length}
+            </LinkButton>
+          ) : (
+            <Button size="lg" className="w-full" icon="grid" disabled>
+              Pick {picked.length ? 'one more' : 'two to compare'}
+            </Button>
+          )}
+        </BottomBar>
+      ) : state.canApprove && groups.both.length + groups.mine.length > 0 && state.project.status !== 'approved' ? (
         <BottomBar>
           <LinkButton href={`${base}/approve`} size="lg" className="w-full" icon="check">
-            I&apos;m ready to pick the final
+            Pick the final
           </LinkButton>
         </BottomBar>
       ) : null}
@@ -188,12 +239,45 @@ export default function FavoritesPage() {
   );
 }
 
-function FavCard({ o, base, style, color, badge }: { o: ShirtOption; base: string; style: 'tee' | 'longsleeve' | 'hoodie'; color: string; badge: string | null }) {
+function FavCard({
+  o,
+  base,
+  style,
+  color,
+  badge,
+  selecting = false,
+}: {
+  o: ShirtOption;
+  base: string;
+  style: 'tee' | 'longsleeve' | 'hoodie';
+  color: string;
+  badge: string | null;
+  selecting?: boolean;
+}) {
   const { state, myReaction, react } = useProject();
   const desktop = useDesktop();
   const picked = useCompare(state.project.id).includes(o.id);
+  if (selecting) {
+    // Picking for a comparison on a phone: a tap picks it instead of opening it.
+    return (
+      <button
+        type="button"
+        onClick={() => compareToggle(state.project.id, o.id)}
+        aria-pressed={picked}
+        aria-label={picked ? 'Picked to compare' : 'Pick to compare'}
+        className={`relative block w-full overflow-hidden rounded-3xl bg-white text-left shadow-[var(--shadow-card)] transition active:scale-[0.98] ${picked ? 'ring-[3px] ring-lagoon' : ''}`}
+      >
+        <div className="bg-sand-2/60 px-3 pt-3">
+          <ShirtPreview design={o.payload} copy={o.payload.copyOverride ?? state.project.brief.copy} style={style} color={color} />
+        </div>
+        <span className={`absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full shadow-[var(--shadow-card)] ${picked ? 'bg-lagoon text-white' : 'bg-white text-ink/40'}`}>
+          <Icon name="check" size={16} />
+        </span>
+      </button>
+    );
+  }
   const card = (
-    <Link href={`${base}/o/${o.id}`} className="relative block overflow-hidden rounded-3xl bg-white shadow-[var(--shadow-card)] transition active:scale-[0.98]">
+    <Link href={designHref(base, o.id, 'favorites')} className="relative block overflow-hidden rounded-3xl bg-white shadow-[var(--shadow-card)] transition active:scale-[0.98]">
       <div className="bg-sand-2/60 px-3 pt-3">
         <ShirtPreview design={o.payload} copy={o.payload.copyOverride ?? state.project.brief.copy} style={style} color={color} />
       </div>

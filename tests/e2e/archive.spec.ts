@@ -31,7 +31,7 @@ test('a design archived for both of you, and back again', async ({ browser }) =>
   await page.goto(`${PROJECT}/o/${target.id}`);
   await page.getByRole('button', { name: 'Archive for both of us' }).click();
   await expect(page.getByText(/This design is out of Browse and Favorites for both of you/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Love it' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Love', exact: true })).toHaveCount(0);
   expect((await options(page)).map((o) => o.id)).not.toContain(target.id);
 
   // Joel doesn't see it either, except under Archived.

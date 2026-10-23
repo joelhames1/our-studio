@@ -14,7 +14,7 @@ import type { ShirtOption } from '@/lib/server/studio';
  * In a sheet on the design page; inline beside the card on a laptop's Browse.
  */
 export function TweakForm({ option, onDone, inline = false }: { option: ShirtOption; onDone?: (o: ShirtOption) => void; inline?: boolean }) {
-  const { state, addOptions } = useProject();
+  const { state, addVersion } = useProject();
   const [prefs] = usePrefs();
   const [text, setText] = useState('');
   const quick = ['Different colors', 'Bigger words', 'More playful', 'Simpler', addArtRequest(state.occasions), 'Make it a badge', 'Just the words'];
@@ -30,8 +30,8 @@ export function TweakForm({ option, onDone, inline = false }: { option: ShirtOpt
       const res = await http<{ option: ShirtOption; summary: string }>(`/api/projects/${state.project.id}/tweak`, {
         body: { optionId: option.id, request, shirt: prefs.color },
       });
-      addOptions([res.option]);
-      toast(`Made a new version: ${res.summary}`);
+      const kept = await addVersion(res.option, option.id);
+      toast(kept ? `Made a new version: ${res.summary}. It's in Favorites too.` : `Made a new version: ${res.summary}`);
       setText('');
       // Inline, hand the keys back to the page so the arrow shortcuts work again.
       if (inline) field.current?.blur();
@@ -63,6 +63,7 @@ export function TweakForm({ option, onDone, inline = false }: { option: ShirtOpt
           if (e.key === 'Escape' && inline) field.current?.blur();
         }}
       />
+      <p className={`mb-2 text-muted ${inline ? 'text-xs' : 'text-sm'}`}>Or tap one to make it straight away:</p>
       <div className="mb-4 flex flex-wrap gap-2">
         {quick.map((q) => (
           <button
@@ -78,7 +79,10 @@ export function TweakForm({ option, onDone, inline = false }: { option: ShirtOpt
       <Button size={inline ? 'md' : 'lg'} className={inline ? 'w-full' : 'mb-2 w-full'} onClick={() => send(text)} busy={busy} icon="wand" disabled={!text.trim()}>
         Make it
       </Button>
-      {!state.ai.words ? <p className={`pb-2 text-center text-xs text-muted ${inline ? 'pt-2' : ''}`}>Works best with short phrases until Claude is connected.</p> : null}
+      {/* Only whoever runs the site can connect Claude, so only they hear about it. */}
+      {!state.ai.words && state.me.admin ? (
+        <p className={`pb-2 text-center text-xs text-muted ${inline ? 'pt-2' : ''}`}>Without Claude this understands short phrases only. Add ANTHROPIC_API_KEY in Setup.</p>
+      ) : null}
     </>
   );
 }

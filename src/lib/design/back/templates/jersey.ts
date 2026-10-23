@@ -28,7 +28,7 @@ function straight(k: BackKit): Composed {
 
 export const jersey: BackTemplate = {
   id: 'jersey',
-  name: 'Name & Number',
+  name: 'Name and number',
   blurb: 'A jersey back: everyone gets their own name',
   occasions: ['birthday', 'team', 'reunion', 'anniversary', 'graduation'],
   uses: ['people', 'bigNumber'],

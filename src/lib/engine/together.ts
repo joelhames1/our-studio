@@ -3,6 +3,7 @@
 // "Erin's hearts"); more get "shared hearts", "3 of 4" and "Everyone". Someone
 // on their own, before they've invited anyone, gets words with nobody else in
 // them. Used on the server and in the browser.
+import type { ReactionValue } from './types';
 
 /** "Erin", "Erin and Sam", "Erin, Sam and Ana", "Erin, Sam and 3 others". */
 export function listNames(names: string[]): string {
@@ -35,3 +36,12 @@ export const sharedTitle = (members: number) => (members <= 2 ? 'You both love' 
 
 /** "you" on your own, "both of you" for two, "everyone" for more. */
 export const allOfYou = (members: number) => (members <= 1 ? 'you' : members === 2 ? 'both of you' : 'everyone');
+
+/**
+ * The reaction a new version of a design starts with: your love or maybe carries
+ * over from the one you changed, so an edit to a favorite stays a favorite (and
+ * doesn't land back in Browse). A pass, or nothing yet, carries nothing.
+ */
+export function carriedReaction(fromParent: ReactionValue | undefined): ReactionValue | null {
+  return fromParent === 'love' || fromParent === 'maybe' ? fromParent : null;
+}

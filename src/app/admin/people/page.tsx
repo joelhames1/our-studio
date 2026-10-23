@@ -5,14 +5,15 @@ import { getUser } from '@/lib/server/auth';
 import { directoryStored } from '@/lib/server/people';
 import { EmptyHousehold, OwnerlessHousehold, PersonCard } from '@/components/PeopleTools';
 import { Icon } from '@/components/Icon';
+import { AdminOnly } from '../rows';
 
 export const dynamic = 'force-dynamic';
 
-/** Setup → People: everyone on the site, closed accounts, and households nobody's in. Only for whoever runs the site. */
+/** All households → People: everyone on the site, closed accounts, and households nobody's in. Only for whoever runs the site. */
 export default async function PeoplePage() {
   const user = await getUser();
-  if (!user) redirect('/');
-  if (!user.admin) redirect('/');
+  if (!user) redirect(`/?next=${encodeURIComponent('/admin/people')}`);
+  if (!user.admin) return <AdminOnly />;
   const stored = await directoryStored();
   const { people, empty, ownerless } = stored ? await peopleOverview(user) : { people: [], empty: [], ownerless: [] };
   const open = people.filter((p) => p.status === 'open');
@@ -20,10 +21,10 @@ export default async function PeoplePage() {
   const list = 'divide-y divide-line/70 overflow-hidden rounded-3xl bg-white shadow-[var(--shadow-card)]';
   return (
     <main className="mx-auto max-w-xl px-4 pb-16 pt-6 sm:px-6 lg:max-w-3xl lg:px-10 lg:pt-12">
-      <Link href="/admin" className="mb-4 inline-flex items-center gap-1 text-sm text-muted">
-        <Icon name="chevronLeft" size={16} /> Setup
+      <Link href="/admin/households" className="mb-4 inline-flex items-center gap-1 text-sm text-muted">
+        <Icon name="chevronLeft" size={16} /> All households
       </Link>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-lagoon">Setup</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-lagoon">All households</p>
       <h1 className="mt-1 font-display text-[30px] leading-tight font-semibold">People</h1>
       <p className="mt-1 text-muted">
         Everyone on the site, and what you can do about an account. Their projects stay private to their households: this page never shows them.

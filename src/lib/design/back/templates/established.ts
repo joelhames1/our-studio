@@ -58,7 +58,8 @@ function collegiate(k: BackKit): Composed {
 
 export const established: BackTemplate = {
   id: 'established',
-  name: 'Est. / Class of',
+  name: 'Year stamp',
+  names: { graduation: 'Class of', anniversary: 'Established', birthday: 'Born in' },
   blurb: 'A small mark with the year that started it',
   occasions: ['anniversary', 'birthday', 'graduation', 'reunion', 'team', 'everyday'],
   uses: ['people', 'year', 'yearLabel', 'signature'],

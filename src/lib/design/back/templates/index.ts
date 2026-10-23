@@ -1,4 +1,4 @@
-import type { BackTemplateId } from '../types';
+import type { BackTemplateId, Occasion } from '../types';
 import { coordinates } from './coordinates';
 import { crew } from './crew';
 import { established } from './established';
@@ -17,4 +17,13 @@ export const BACK_TEMPLATES: BackTemplate[] = [flightPath, tourDates, numbers, t
 
 export function backTemplate(id: BackTemplateId | string): BackTemplate {
   return BACK_TEMPLATES.find((t) => t.id === id) ?? statement;
+}
+
+/** What a template is called for a project's occasions: "Class of" on a graduation, "Year stamp" anywhere else. */
+export function templateName(t: BackTemplate, occasions: readonly Occasion[] = []): string {
+  for (const o of occasions) {
+    const name = t.names?.[o];
+    if (name) return name;
+  }
+  return t.name;
 }

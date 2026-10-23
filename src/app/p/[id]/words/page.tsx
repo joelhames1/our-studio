@@ -89,7 +89,7 @@ export default function WordsPage() {
 
   return (
     <div className="animate-pop">
-      <PageTitle kicker="Step 2" title="The words" sub="Change anything. The preview updates as you type, spelled exactly as it'll print." />
+      <PageTitle title="The words" sub="Change anything. The preview updates as you type, spelled exactly as it'll print." />
 
       <div className="lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:items-start lg:gap-10">
         <div className="mb-5 rounded-3xl bg-gradient-to-b from-lagoon-soft to-sand-2 px-12 pt-5 shadow-[var(--shadow-card)] lg:sticky lg:top-32 lg:mb-0">

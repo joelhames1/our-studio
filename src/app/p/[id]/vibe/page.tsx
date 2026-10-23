@@ -1,45 +1,31 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
 import { useProject } from '@/components/ProjectProvider';
 import { ShirtPreview } from '@/components/ShirtPreview';
 import { Icon } from '@/components/Icon';
+import { STYLE_BATCH, useStylePick } from '@/components/StylePicker';
 import { BottomBar, Button, PageTitle } from '@/components/ui';
-import { toast } from '@/components/Toast';
 import { usePrefs } from '@/lib/client/prefs';
-import { sampleFor, vibesFor } from '@/lib/design/vibes';
+import { sampleFor } from '@/lib/design/vibes';
 
-export default function VibePage() {
-  const { state, saveBrief, remix } = useProject();
+/** Styles, with a shirt for each: the full version of the chips at the end of Browse. */
+export default function StylePage() {
+  const { state } = useProject();
   const [prefs] = usePrefs();
   const router = useRouter();
-  const [picked, setPicked] = useState<string[]>(state.project.brief.vibes);
-  const [busy, setBusy] = useState(false);
+  const { picked, toggle, changed, apply, busy, styles } = useStylePick();
   const copy = state.project.brief.copy;
-
-  const toggle = (id: string) =>
-    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length >= 3 ? [...p.slice(1), id] : [...p, id]));
+  const browse = `/p/${state.project.id}/browse`;
 
   const go = async () => {
-    setBusy(true);
-    try {
-      const changed = picked.join() !== state.project.brief.vibes.join();
-      if (changed) {
-        await saveBrief({ vibes: picked });
-        await remix(null, 8);
-      }
-      router.push(`/p/${state.project.id}/browse`);
-    } catch (e) {
-      toast((e as Error).message, 'error');
-      setBusy(false);
-    }
+    if (!changed || (await apply())) router.push(browse);
   };
 
   return (
     <div className="animate-pop">
-      <PageTitle kicker="Step 1" title="What's the vibe?" sub="Tap up to three. New designs will lean this way. (You can skip this.)" />
+      <PageTitle title="What style are you after?" sub={`Tap up to three, and ${STYLE_BATCH} new designs will lean that way. Or skip it: everything's a mix to start with.`} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-5 xl:grid-cols-4">
-        {vibesFor(state.occasions).map((v) => {
+        {styles.map((v) => {
           const on = picked.includes(v.id);
           return (
             <button
@@ -69,8 +55,12 @@ export default function VibePage() {
 
       <BottomBar>
         <div className="lg:mx-auto lg:max-w-md">
-          <Button size="lg" className="w-full" onClick={go} busy={busy} icon="sparkles">
-            {picked.length ? `Show me ${picked.length === 1 ? 'that vibe' : 'these vibes'}` : 'Surprise me with everything'}
+          <Button size="lg" className="w-full" onClick={go} busy={busy} icon={changed ? 'sparkles' : 'cards'}>
+            {!changed
+              ? 'Back to browsing'
+              : picked.length
+                ? `Make ${STYLE_BATCH} in ${picked.length === 1 ? 'this style' : 'these styles'}`
+                : `Make ${STYLE_BATCH} in any style`}
           </Button>
         </div>
       </BottomBar>

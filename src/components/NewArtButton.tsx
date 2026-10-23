@@ -55,7 +55,7 @@ export function NewArtButton({ basedOn, label = 'New artwork', variant = 'coral'
       </Button>
       <Sheet open={open} onClose={() => !busy && setOpen(false)} title="New artwork">
         <p className="mb-3 text-[15px] text-muted">
-          An AI artist paints something new in the vibes you picked. Want anything in particular?
+          An AI artist paints something new in the styles you picked. Want anything in particular?
         </p>
         <input
           value={idea}

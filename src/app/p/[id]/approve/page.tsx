@@ -4,7 +4,7 @@ import { Suspense, useMemo, useState } from 'react';
 import { otherName, useProject } from '@/components/ProjectProvider';
 import { ShirtPreview } from '@/components/ShirtPreview';
 import { BackPreview } from '@/components/BackPreview';
-import { backName } from '@/components/BackMeta';
+import { useBackName } from '@/components/BackMeta';
 import { TryOn3D } from '@/components/TryOn3D';
 import { GarmentPicker } from '@/components/GarmentPicker';
 import { Icon } from '@/components/Icon';
@@ -20,7 +20,7 @@ import { garmentColor } from '@/lib/design/palettes';
 import { PRINT_PRESETS, printSizeIn } from '@/lib/design/garments';
 import { printedCopy } from '@/lib/design/printed';
 import type { GarmentStyle } from '@/lib/design/types';
-import { SIZES, type SizeLine } from '@/lib/kinds/shirt';
+import { SIZES, startingSizes, type SizeLine } from '@/lib/kinds/shirt';
 import { fitFor } from '@/lib/three/body';
 import { heartBadge } from '@/lib/engine/together';
 import { FinalSay } from '@/components/FinalSay';
@@ -35,6 +35,7 @@ export default function ApprovePageWrapper() {
 
 function ApprovePage() {
   const { state, matches, myReaction, otherLoves, option, refresh, backs, backOption, wearer, lovers, members } = useProject();
+  const backName = useBackName();
   const fonts = useFonts();
   const [prefs, setPrefs] = usePrefs();
   const [show3d, setShow3d] = useState(false);
@@ -63,10 +64,7 @@ function ApprovePage() {
   const [style, setStyle] = useState<GarmentStyle>(prefs.style);
   const [color, setColor] = useState(prefs.color);
   const [preset, setPreset] = useState(prefs.style === 'hoodie' ? 'medium' : 'standard');
-  const [sizes, setSizes] = useState<SizeLine[]>(() => {
-    const people = state.facts.people.filter((p) => p.trim());
-    return (people.length ? people : [state.me.name]).slice(0, 12).map((who) => ({ who, size: 'M', qty: 1 }));
-  });
+  const [sizes, setSizes] = useState<SizeLine[]>(() => startingSizes(state.facts.people, state.members.map((m) => m.name), state.me.name));
   const [notes, setNotes] = useState('');
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -74,32 +72,35 @@ function ApprovePage() {
   const pick = pickId ? option(pickId) : undefined;
   const back = backId ? backOption(backId) : undefined;
 
-  if (!state.canApprove) {
-    return (
-      <div className="animate-pop pt-6 text-center">
-        <PageTitle title={`${state.approverName} makes the final call`} sub={`Keep hearting designs; the ones ${members <= 2 ? 'you both love' : 'more of you love'} are at the top of ${state.approverName}’s list.`} />
-        <LinkButton href={`${base}/favorites`} icon="star">
-          See favorites
-        </LinkButton>
-        <FinalSay className="mt-6" />
-      </div>
-    );
-  }
   if (state.project.status === 'approved') {
     return (
       <div className="animate-pop pt-6 text-center">
-        <PageTitle title="Already approved" sub="The print files are ready." />
+        <PageTitle title="It's already approved" sub={state.decision?.status === 'ready' ? 'The print files are ready.' : 'The print files are being made.'} />
         <LinkButton href={`${base}/done`} icon="download">
           Get the print files
         </LinkButton>
       </div>
     );
   }
+  if (!state.canApprove) {
+    return (
+      <div className="animate-pop pt-6 text-center">
+        <PageTitle
+          title={`${state.approverName} makes the final call`}
+          sub={`Keep loving the ones you like; the ones ${members <= 2 ? 'you both love' : 'more of you love'} are at the top of ${state.approverName}’s list.`}
+        />
+        <LinkButton href={`${base}/favorites`} icon="heart">
+          See favorites
+        </LinkButton>
+        <FinalSay className="mt-6" />
+      </div>
+    );
+  }
   if (!candidates.length) {
     return (
       <div className="animate-pop pt-6 text-center">
-        <PageTitle title="Heart a few first" sub="Pick the final from the designs you've hearted." />
-        <LinkButton href={`${base}/browse`} icon="heart">
+        <PageTitle title="Love a few first" sub="The final is picked from the designs you love." />
+        <LinkButton href={`${base}/browse`} icon="cards">
           Browse designs
         </LinkButton>
       </div>
@@ -146,7 +147,7 @@ function ApprovePage() {
 
   return (
     <div className="animate-pop">
-      <PageTitle kicker="The final step" title="Pick the one" sub="Check everything once. After this, the print files get made." />
+      <PageTitle title="Pick the final" sub="Check everything once. After this, the print files get made." />
 
       <div className="lg:grid lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:gap-x-10">
         {section(
@@ -389,11 +390,17 @@ function ApprovePage() {
         )}
 
         <p className="mb-2 text-center text-sm text-muted lg:col-start-2">
-          {total} shirt{total === 1 ? '' : 's'} · {dims.w} × {dims.h} in print{back ? ' · printed on the back too' : ''} · {otherName(state)} can download everything too
+          {total} shirt{total === 1 ? '' : 's'} · {dims.w} × {dims.h} in print{back ? ' · printed on the back too' : ''}
+          {members > 1 ? ` · ${otherName(state)} can download everything too` : ''}
         </p>
-        <Button size="lg" className="mb-4 w-full lg:col-start-2" variant="coral" disabled={!checked || !pick || total === 0} busy={busy} onClick={submit} icon="check">
-          Yes, this is the one
+        <Button size="lg" className="mb-2 w-full lg:col-start-2" variant="coral" disabled={!checked || !pick || total === 0} busy={busy} onClick={submit} icon="check">
+          Approve and make the print files
         </Button>
+        {!checked || total === 0 ? (
+          <p className="mb-4 text-center text-sm text-muted lg:col-start-2">
+            {total === 0 ? 'Add at least one shirt under “Who gets one”.' : 'Tick “I’ve checked every word” above to finish.'}
+          </p>
+        ) : null}
       </div>
     </div>
   );

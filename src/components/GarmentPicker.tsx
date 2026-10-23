@@ -29,7 +29,8 @@ export function GarmentPicker({
           </button>
         ))}
       </div>
-      <div className="-mx-2 flex gap-2.5 overflow-x-auto px-2 py-2 [scrollbar-width:none]" role="radiogroup" aria-label="Shirt color">
+      {/* Wrapped rather than scrolled sideways, so every color is in sight. */}
+      <div className="flex flex-wrap gap-2.5 p-1" role="radiogroup" aria-label="Shirt color">
         {GARMENT_COLORS.map((c) => (
           <button
             key={c.id}

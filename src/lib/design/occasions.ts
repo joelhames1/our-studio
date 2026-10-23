@@ -58,7 +58,7 @@ export function ordinal(n: string): string {
   return `${t}${suffix}`;
 }
 
-/** "Erin's", "James'". */
+/** "Sam's", "James'". */
 export function possessive(name: string): string {
   const n = name.trim();
   return /s$/i.test(n) ? `${n}'` : `${n}'s`;
@@ -72,6 +72,32 @@ export function names(people: string[]): string {
 }
 
 const thisYear = () => String(new Date().getFullYear());
+
+/**
+ * A name for the project from what's been filled in so far ("Sam's Graduation",
+ * "Maya's 40th", "Lisbon 2027"), or null when there's nothing to go on or the
+ * occasion has no natural one.
+ */
+export function suggestedTitle(occasion: Occasion, b: Pick<Basics, 'people' | 'number' | 'place' | 'dates'>): string | null {
+  const people = b.people.map((x) => x.trim()).filter(Boolean);
+  const who = names(people);
+  const year = b.dates.match(/\b(19|20)\d{2}\b/)?.[0];
+  switch (occasion) {
+    case 'graduation':
+      return people[0] ? `${possessive(people[0])} Graduation` : null;
+    case 'birthday':
+      if (!people[0]) return null;
+      return /^\d+$/.test(b.number.trim()) ? `${possessive(people[0])} ${ordinal(b.number)}` : `${possessive(people[0])} Birthday`;
+    case 'anniversary':
+      if (/^\d+$/.test(b.number.trim())) return `Our ${ordinal(b.number)}`;
+      return who ? `${possessive(who)} Anniversary` : null;
+    case 'trip':
+      if (b.place.trim()) return year ? `${b.place.trim()} ${year}` : b.place.trim();
+      return who ? `${possessive(who)} Trip` : null;
+    default:
+      return null;
+  }
+}
 
 /** Keeps the ideas whose words all filled in, then tops up with fallbacks. */
 function finish(ideas: (Copy | null)[], fallbacks: Copy[]): Copy[] {
@@ -102,7 +128,7 @@ const TRIP: OccasionPreset = {
     title: 'What should we call it?',
     titlePlaceholder: 'Lisbon 2027',
     people: 'Who’s going?',
-    peoplePlaceholder: 'Joel, Erin',
+    peoplePlaceholder: 'Sam, Alex',
     datesPlaceholder: 'Jun 2 – 9, 2027',
     place: 'Where to?',
     placePlaceholder: 'Lisbon',
@@ -150,7 +176,7 @@ const ANNIVERSARY: OccasionPreset = {
     title: 'What should we call it?',
     titlePlaceholder: 'Our 10th',
     people: 'The happy couple',
-    peoplePlaceholder: 'Joel, Erin',
+    peoplePlaceholder: 'Sam, Alex',
     datesPlaceholder: 'Sep 2027',
     number: 'How many years?',
     year: 'Married in',
@@ -334,7 +360,7 @@ const TEAM: OccasionPreset = {
     title: 'Team name',
     titlePlaceholder: 'The Fast Turtles',
     people: 'Who’s on it?',
-    peoplePlaceholder: 'Joel, Erin',
+    peoplePlaceholder: 'Sam, Alex',
     datesPlaceholder: 'Race day, Oct 2027',
     number: 'Number (for jerseys)',
     year: 'Since',
@@ -373,7 +399,7 @@ const EVERYDAY: OccasionPreset = {
     title: 'What should we call it?',
     titlePlaceholder: 'Summer of Yes',
     people: 'Who’s it for?',
-    peoplePlaceholder: 'Joel, Erin',
+    peoplePlaceholder: 'Sam, Alex',
     datesPlaceholder: 'Summer 2027',
     place: 'Where? (optional)',
     placePlaceholder: 'Springfield',

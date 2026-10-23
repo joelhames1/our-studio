@@ -21,7 +21,7 @@ async function act(body: object, done: string, router: ReturnType<typeof useRout
   }
 }
 
-/** One person on Setup → People, with what Joel can do about their account. */
+/** One person on All households → People, with what Joel can do about their account. */
 export function PersonCard({ p }: { p: PersonRow }) {
   const router = useRouter();
   const [mode, setMode] = useState<'idle' | 'off' | 'erase'>('idle');

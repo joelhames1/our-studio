@@ -53,7 +53,7 @@ export function HomeProjectCard({
               : unseen > 0
                 ? `${unseen} new design${unseen === 1 ? '' : 's'} to look at`
                 : `All ${total} seen`}
-            {!approved && matches > 0 ? ` · ${sharedCount(matches, members)}` : !approved && hearts > 0 ? ` · ${hearts} hearted` : ''}
+            {!approved && matches > 0 ? ` · ${sharedCount(matches, members)}` : !approved && hearts > 0 ? ` · ${hearts} loved` : ''}
           </p>
           {!approved ? <p className="mt-0.5 text-xs text-muted/80">{decider}</p> : null}
         </div>

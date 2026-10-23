@@ -188,11 +188,11 @@ export function TryOn3D({ design, copy, style, color, widthIn, placement, fit, o
           stageRef.current?.spin(next);
           setSpinning(next);
         }, spinning)}
-        {btn('Front', 'shirt', () => {
+        {btn('Front view', 'shirt', () => {
           stageRef.current?.face('front');
           setSpinning(false);
         })}
-        {btn('Back', 'undo', () => {
+        {btn('Back view', 'undo', () => {
           stageRef.current?.face('back');
           setSpinning(false);
         })}

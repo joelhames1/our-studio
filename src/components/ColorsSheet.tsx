@@ -37,7 +37,7 @@ export function ColorsSheet({
   onSaved: (o: ShirtOption) => void;
   onDraft?: (d: ShirtDesign | null) => void;
 }) {
-  const { state, addOptions } = useProject();
+  const { state, addVersion } = useProject();
   const [prefs] = usePrefs();
   const start = option.payload;
   // Colors don't change the lettering, so this design's fonts are all it needs.
@@ -98,9 +98,9 @@ export function ColorsSheet({
       const patch: Partial<ShirtDesign> = { colors };
       if (palette !== start.palette) patch.palette = palette;
       const res = await http<{ option: ShirtOption }>(`/api/projects/${state.project.id}/edit`, { body: { optionId: option.id, patch } });
-      addOptions([res.option]);
+      const kept = await addVersion(res.option, option.id);
       const what = [...(palette !== start.palette ? [`${PALETTES.find((p) => p.id === palette)?.name} scheme`] : []), ...colorChanges(start.colors, colors)];
-      toast(`Made a new version: ${what.join(', ')}`);
+      toast(`Made a new version: ${what.join(', ')}${kept ? ". It's in Favorites too." : ''}`);
       onSaved(res.option);
     } catch (e) {
       toast((e as Error).message, 'error');
@@ -158,11 +158,11 @@ export function ColorsSheet({
 
       <div className="mt-3 flex min-h-9 items-center justify-between gap-2 text-sm">
         <span>
-          <span className="font-medium">{partLabel(current)}:</span> {own ? colorName(own) : <span className="text-muted">the scheme&apos;s color</span>}
+          <span className="font-medium">{partLabel(current)}:</span> {own ? colorName(own) : <span className="text-muted">from the color scheme</span>}
         </span>
         {own ? (
           <button onClick={() => pick(null)} className="flex items-center gap-1 text-lagoon-deep underline underline-offset-4">
-            <Icon name="undo" size={14} /> Back to the scheme
+            <Icon name="undo" size={14} /> Back to the color scheme
           </button>
         ) : null}
       </div>
@@ -240,7 +240,8 @@ export function ColorsSheet({
         </p>
       ) : null}
 
-      <div className="sticky bottom-0 -mx-5 mt-4 bg-sand px-5 pb-4 pt-2 lg:-mx-6 lg:px-6">
+      {/* A fade above the button says there's more underneath while the swatches scroll behind it. */}
+      <div className="sticky bottom-0 -mx-5 mt-4 bg-sand px-5 pb-4 pt-2 before:pointer-events-none before:absolute before:inset-x-0 before:-top-6 before:h-6 before:bg-gradient-to-t before:from-sand before:to-transparent lg:-mx-6 lg:px-6">
         <Button size="lg" className="w-full" icon="check" onClick={save} busy={busy} disabled={!changed}>
           Save as a new version
         </Button>

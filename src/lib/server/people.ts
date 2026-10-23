@@ -267,7 +267,7 @@ export async function pastMembersOf(householdId: HouseholdId): Promise<PastMembe
   return out.sort((a, b) => b.endedAt.localeCompare(a.endedAt));
 }
 
-/** The whole directory as stored, for whoever runs the site (Setup → People). */
+/** The whole directory as stored, for whoever runs the site (All households → People). */
 export async function everyone(): Promise<{ people: Person[]; households: Household[]; memberships: Membership[]; stored: boolean }> {
   const dir = await directory();
   return { people: [...dir.people.values()], households: [...dir.households.values()], memberships: dir.all, stored: dir.stored };

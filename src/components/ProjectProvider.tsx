@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 import type { Copy, ShirtDesign } from '@/lib/design/types';
 import type { Reaction, ReactionValue } from '@/lib/engine/types';
 import { http } from '@/lib/client/http';
+import { carriedReaction } from '@/lib/engine/together';
 import type { BackOption, BriefPatch, ProjectState, ShirtOption } from '@/lib/server/studio';
 
 interface ProjectApi {
@@ -27,6 +28,11 @@ interface ProjectApi {
   remix: (parentId?: string | null, count?: number) => Promise<ShirtOption[]>;
   saveBrief: (patch: BriefPatch) => Promise<void>;
   addOptions: (options: ShirtOption[], toFront?: boolean) => void;
+  /**
+   * A new version of a design (a change, new words, new colors): added, with your
+   * love or maybe carried over from the one it came from. True when it was.
+   */
+  addVersion: (option: ShirtOption, parentId: string) => Promise<boolean>;
   /** Backs, best first: ones you love with others (most-loved first), your hearts, theirs, new ones, then passes. */
   backs: BackOption[];
   backOption: (id: string) => BackOption | undefined;
@@ -36,6 +42,8 @@ interface ProjectApi {
   referenceFront: ShirtOption | undefined;
   remixBacks: (opts?: { parentId?: string | null; template?: string; count?: number }) => Promise<BackOption[]>;
   addBacks: (options: BackOption[]) => void;
+  /** A new version of a back, with your love or maybe carried over like addVersion. */
+  addBackVersion: (option: BackOption, parentId: string) => Promise<boolean>;
   /** Whose name a jersey back shows for you. */
   wearer: string;
   refresh: () => Promise<void>;
@@ -150,6 +158,18 @@ export function ProjectProvider({ initial, children }: { initial: ProjectState; 
     if (toFront) setFront((f) => [...options.map((o) => o.id), ...f]);
   }, []);
 
+  const addVersion = useCallback(
+    async (option: ShirtOption, parentId: string) => {
+      const keep = carriedReaction(mine.get(parentId));
+      // One you'll react to anyway goes to the front of Browse; one that keeps your heart goes to Favorites.
+      addOptions([option], !keep);
+      if (!keep) return false;
+      await react(option.id, keep).catch(() => undefined);
+      return true;
+    },
+    [mine, addOptions, react],
+  );
+
   const remix = useCallback(
     async (parentId?: string | null, count = 6) => {
       const res = await http<{ options: ShirtOption[] }>(`/api/projects/${id}/remix`, { body: { parentId: parentId ?? null, count } });
@@ -162,6 +182,17 @@ export function ProjectProvider({ initial, children }: { initial: ProjectState; 
   const addBacks = useCallback((options: BackOption[]) => {
     setState((s) => ({ ...s, backs: [...s.backs.filter((o) => !options.some((n) => n.id === o.id)), ...options] }));
   }, []);
+
+  const addBackVersion = useCallback(
+    async (option: BackOption, parentId: string) => {
+      const keep = carriedReaction(mine.get(parentId));
+      addBacks([option]);
+      if (!keep) return false;
+      await react(option.id, keep).catch(() => undefined);
+      return true;
+    },
+    [mine, addBacks, react],
+  );
 
   const remixBacks = useCallback(
     async (opts: { parentId?: string | null; template?: string; count?: number } = {}) => {
@@ -221,6 +252,7 @@ export function ProjectProvider({ initial, children }: { initial: ProjectState; 
     remix,
     saveBrief,
     addOptions,
+    addVersion,
     refresh,
     setState,
     backs,
@@ -230,6 +262,7 @@ export function ProjectProvider({ initial, children }: { initial: ProjectState; 
     referenceFront,
     remixBacks,
     addBacks,
+    addBackVersion,
     wearer: state.facts.people.find((p) => p.trim().toLowerCase() === state.me.name.toLowerCase()) ?? state.facts.people[0] ?? state.me.name,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

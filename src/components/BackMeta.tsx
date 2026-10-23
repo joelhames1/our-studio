@@ -1,5 +1,6 @@
 'use client';
-import { backTemplate } from '@/lib/design/back/templates';
+import { backTemplate, templateName } from '@/lib/design/back/templates';
+import type { Occasion } from '@/lib/design/back/types';
 import { pairing } from '@/lib/design/pairings';
 import { palette } from '@/lib/design/palettes';
 import type { BackOption } from '@/lib/server/studio';
@@ -8,10 +9,18 @@ import { listNames, sharedLine } from '@/lib/engine/together';
 import { useProject } from './ProjectProvider';
 import { Pill } from './ui';
 
-export function backName(o: BackOption): string {
+/** A back's name, as it's called for this project's occasions: "Class of · Round stamp". */
+export function backName(o: BackOption, occasions: readonly Occasion[] = []): string {
   const t = backTemplate(o.payload.template);
   const v = t.variants.find((x) => x.id === o.payload.variant) ?? t.variants[0];
-  return t.variants.length > 1 ? `${t.name} · ${v.name}` : t.name;
+  const name = templateName(t, occasions);
+  return t.variants.length > 1 ? `${name} · ${v.name}` : name;
+}
+
+/** backName for the project on screen. */
+export function useBackName(): (o: BackOption) => string {
+  const { state } = useProject();
+  return (o) => backName(o, state.occasions);
 }
 
 export function describeBack(o: BackOption): string {

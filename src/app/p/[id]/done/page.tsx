@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { nameIn, useProject } from '@/components/ProjectProvider';
 import { ShirtPreview } from '@/components/ShirtPreview';
 import { BackPreview } from '@/components/BackPreview';
 import { PrinterFinder } from '@/components/PrinterFinder';
+import { useReopen } from '@/components/Reopen';
 import { Icon } from '@/components/Icon';
 import { Button, LinkButton, PageTitle, Spinner } from '@/components/ui';
 import { toast } from '@/components/Toast';
@@ -18,10 +19,11 @@ import type { ProjectState } from '@/lib/server/studio';
 const fmtBytes = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
 
 export default function DonePage() {
-  const { state, setState, refresh } = useProject();
-  const router = useRouter();
+  const { state, refresh } = useProject();
   const [decision, setDecision] = useState<Decision<ShirtSnapshot> | null>(state.decision);
-  const [reopening, setReopening] = useState(false);
+  const { reopen: changeMind, busy: reopening } = useReopen();
+  // "Send to a print shop" from the project page lands here with the link ready to make.
+  const [sendAny, setSendAny] = useState(useSearchParams().get('send') === '1');
   const started = useRef(false);
   const base = `/p/${state.project.id}`;
 
@@ -74,22 +76,14 @@ export default function DonePage() {
   const dims = printSizeIn(preset);
   const style = GARMENT_STYLES.find((g) => g.id === snap.garment)?.name ?? 'Shirt';
   const total = snap.sizes.reduce((a, s) => a + s.qty, 0);
+  const files = decision.files ?? [];
+  const zip = files.find((f) => f.name.endsWith('.zip'));
+  const singles = files.filter((f) => f !== zip);
+  const fileHref = (f: (typeof files)[number]) => `/api/assets/${f.key}?download=${encodeURIComponent(f.name.split('/').pop()!)}`;
 
   const rebuild = async () => {
     started.current = false;
     setDecision({ ...decision, status: 'building', error: undefined });
-  };
-
-  const changeMind = async () => {
-    if (!confirm('Go back to choosing? The current print files will be set aside.')) return;
-    setReopening(true);
-    try {
-      setState(await http<ProjectState>(`/api/projects/${state.project.id}/reopen`, { body: {} }));
-      router.push(`${base}/favorites`);
-    } catch (e) {
-      toast((e as Error).message, 'error');
-      setReopening(false);
-    }
   };
 
   return (
@@ -135,32 +129,50 @@ export default function DonePage() {
               <div className="rounded-3xl bg-white p-5 shadow-[var(--shadow-card)]">
                 <h2 className="font-display text-xl font-semibold">For the print shop</h2>
                 <p className="mt-1 text-[15px] text-muted">
-                  Send them the <b className="font-medium text-ink">print file{snap.back ? 's (front and back)' : ''}</b> and the <b className="font-medium text-ink">order sheet</b>. Or just send the zip, which has everything.
+                  The easiest way: send the shop a link. They see the order and download the {snap.back ? 'front and back ' : ''}print files and order sheet, no sign-in needed.
                 </p>
-                <div className="mt-4 space-y-2">
-                  {(decision.files ?? []).map((f, i) => (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <Button size="lg" icon="send" onClick={() => setSendAny(true)}>
+                    Send to a print shop
+                  </Button>
+                  {zip ? (
                     <a
-                      key={f.key}
-                      href={`/api/assets/${f.key}?download=${encodeURIComponent(f.name.split('/').pop()!)}`}
-                      className={`flex items-center gap-3 rounded-2xl px-4 py-3 transition active:scale-[0.99] ${i === 0 ? 'bg-lagoon text-white' : 'bg-sand ring-1 ring-line'}`}
+                      href={fileHref(zip)}
+                      className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-white px-6 text-[17px] font-medium text-ink ring-1 ring-line transition hover:ring-ink/20 active:scale-[0.97]"
                     >
-                      <Icon name={f.name.endsWith('.zip') ? 'download' : f.name.endsWith('.pdf') ? 'file' : 'shirt'} size={20} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block font-medium">{f.label}</span>
-                        <span className={`block truncate text-xs ${i === 0 ? 'text-white/75' : 'text-muted'}`}>
-                          {f.name} · {fmtBytes(f.bytes)}
-                        </span>
-                      </span>
-                      <Icon name="download" size={18} />
+                      <Icon name="download" size={18} /> Download everything
                     </a>
-                  ))}
+                  ) : null}
                 </div>
+                {zip ? <p className="mt-2 text-center text-xs text-muted sm:text-left">{zip.name.split('/').pop()} · {fmtBytes(zip.bytes)}</p> : null}
+                {singles.length ? (
+                  <details className="group mt-4 rounded-2xl bg-sand/60 px-4 py-1 ring-1 ring-line">
+                    <summary className="flex cursor-pointer list-none items-center justify-between py-2.5 text-[15px] font-medium">
+                      Individual files ({singles.length})
+                      <Icon name="chevronRight" size={18} className="text-ink/40 transition group-open:rotate-90" />
+                    </summary>
+                    <div className="space-y-2 pb-3">
+                      {singles.map((f) => (
+                        <a key={f.key} href={fileHref(f)} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 ring-1 ring-line transition active:scale-[0.99]">
+                          <Icon name={f.name.endsWith('.pdf') ? 'file' : 'shirt'} size={20} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium">{f.label}</span>
+                            <span className="block truncate text-xs text-muted">
+                              {f.name} · {fmtBytes(f.bytes)}
+                            </span>
+                          </span>
+                          <Icon name="download" size={18} />
+                        </a>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
               </div>
               <div className="mt-4 rounded-3xl bg-sun-soft p-5 text-[15px] text-[#6b4f0c]">
                 <div className="mb-1 font-medium">Tip</div>
                 Order one test shirt first. Colors on fabric always look a little different from a screen, and it&apos;s cheap insurance before the full order.
               </div>
-              <PrinterFinder />
+              <PrinterFinder sendAny={sendAny} onSendClosed={() => setSendAny(false)} />
             </>
           )}
         </div>

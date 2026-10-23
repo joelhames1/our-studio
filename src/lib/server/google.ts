@@ -21,6 +21,8 @@ import { config } from './config';
 import { cookieName } from './cookies';
 
 export const PKCE_COOKIE = cookieName('studio_pkce');
+/** The page to come back to after Google, held for the trip there and back. */
+export const NEXT_COOKIE = cookieName('studio_next');
 export const CALLBACK_PATH = '/api/auth/callback';
 const WAIT_SECONDS = 10 * 60;
 const TIMEOUT_MS = 10_000;
@@ -193,6 +195,11 @@ async function forget(id: unknown) {
 /** The short-lived cookie that holds the verifier while you're at Google. */
 export function verifierCookie(value: string) {
   return { name: PKCE_COOKIE, value, httpOnly: true, secure: config.isProduction, sameSite: 'lax' as const, path: '/', maxAge: value ? WAIT_SECONDS : 0 };
+}
+
+/** The short-lived cookie that holds the page to return to while you're at Google. */
+export function nextCookie(value: string) {
+  return { name: NEXT_COOKIE, value, httpOnly: true, secure: config.isProduction, sameSite: 'lax' as const, path: '/', maxAge: value ? WAIT_SECONDS : 0 };
 }
 
 /** Back to the welcome screen, saying why. */

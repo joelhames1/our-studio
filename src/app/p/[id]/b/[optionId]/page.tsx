@@ -1,15 +1,17 @@
 'use client';
-import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { BackPreview } from '@/components/BackPreview';
-import { BackBadges, backName, describeBack } from '@/components/BackMeta';
+import { BackBadges, describeBack, useBackName } from '@/components/BackMeta';
 import { FactsSheet } from '@/components/FactsSheet';
 import { GarmentPicker } from '@/components/GarmentPicker';
 import { useProject } from '@/components/ProjectProvider';
+import { Icon } from '@/components/Icon';
 import { ReactionButtons } from '@/components/Reactions';
 import { ArchivedNote, useDesignArchive } from '@/components/ArchiveBits';
 import { ShirtPreview } from '@/components/ShirtPreview';
-import { Sheet } from '@/components/Sheet';
+import { leaveSheet, Sheet } from '@/components/Sheet';
 import { toast } from '@/components/Toast';
 import { TryOn3D } from '@/components/TryOn3D';
 import { Button, BUTTON_PAIRS, LinkButton } from '@/components/ui';
@@ -20,6 +22,7 @@ import { backTemplate } from '@/lib/design/back/templates';
 import type { BackDesign } from '@/lib/design/back/types';
 import type { BackOption } from '@/lib/server/studio';
 import { fitFor } from '@/lib/three/body';
+import { backHref, originOf, returnTo } from '@/lib/engine/paths';
 
 const VIEWS = [
   { id: 'chest', label: 'Close-up' },
@@ -31,7 +34,9 @@ type View = (typeof VIEWS)[number]['id'];
 
 export default function BackOptionPage() {
   const { optionId } = useParams<{ optionId: string }>();
-  const { state, anyBack, referenceFront, myReaction, react, remixBacks, addBacks, wearer, members } = useProject();
+  const from = originOf(useSearchParams().get('from'));
+  const { state, anyBack, referenceFront, myReaction, react, remixBacks, addBackVersion, wearer, members } = useProject();
+  const backName = useBackName();
   const [prefs, setPrefs] = usePrefs();
   const router = useRouter();
   const [view, setView] = useState<View>('chest');
@@ -41,13 +46,18 @@ export default function BackOptionPage() {
   const o = anyBack(optionId);
   const shelf = useDesignArchive(optionId);
   const base = `/p/${state.project.id}`;
+  // Opened from Favorites or the final step, back goes there; otherwise to the back prints.
+  const back =
+    from === 'favorites' || from === 'final'
+      ? returnTo(base, from, state.project.status === 'approved')
+      : { href: `${base}/back`, label: 'Back prints', button: 'All the back prints' };
 
   if (!o || !referenceFront) {
     return (
       <div className="pt-10 text-center text-muted">
         That back isn&apos;t here anymore.
         <div className="mt-4">
-          <LinkButton href={`${base}/back`}>All the backs</LinkButton>
+          <LinkButton href={back.href}>{back.button}</LinkButton>
         </div>
       </div>
     );
@@ -56,13 +66,13 @@ export default function BackOptionPage() {
   const front = referenceFront.payload;
   const copy = front.copyOverride ?? state.project.brief.copy;
   const mine = myReaction(o.id);
-  const goTo = (n: BackOption) => router.push(`${base}/b/${n.id}`);
+  const goTo = (n: BackOption) => leaveSheet(router, backHref(base, n.id, from));
 
   const edit = async (patch: Partial<Record<keyof BackDesign, unknown>>, what: string) => {
     setBusy(what);
     try {
       const res = await http<{ option: BackOption }>(`/api/projects/${state.project.id}/backs/edit`, { body: { optionId: o.id, patch } });
-      addBacks([res.option]);
+      await addBackVersion(res.option, o.id);
       goTo(res.option);
     } catch (e) {
       toast((e as Error).message, 'error');
@@ -90,6 +100,9 @@ export default function BackOptionPage() {
   return (
     <div className="animate-pop lg:grid lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-start lg:gap-10">
       <div className="lg:sticky lg:top-32">
+        <Link href={back.href} className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
+          <Icon name="chevronLeft" size={16} /> {back.label}
+        </Link>
         <div className="mb-3 flex gap-1.5 rounded-full bg-sand-2 p-1" role="radiogroup" aria-label="View">
           {VIEWS.map((v) => (
             <button
@@ -198,19 +211,28 @@ export default function BackOptionPage() {
           </div>
         )}
 
-        <div className={`mt-6 ${BUTTON_PAIRS}`}>
+        {state.canApprove && state.project.status !== 'approved' && !o.archived ? (
+          <div className="mt-6 rounded-3xl bg-lagoon-soft p-5 text-center">
+            <p className="font-display text-lg font-semibold text-lagoon-deep">This one on the back?</p>
+            <p className="mb-4 mt-1 text-sm text-lagoon-deep/80">You&apos;ll pick the front and check everything on the next screen.</p>
+            <LinkButton href={`${base}/approve?back=${o.id}`} size="lg" icon="check" className="w-full">
+              Use this back
+            </LinkButton>
+          </div>
+        ) : null}
+
+        <h2 className="mb-2 mt-7 text-xs font-semibold uppercase tracking-wider text-muted">Make a version</h2>
+        <p className="mb-3 text-sm text-muted">Each one is a new back; this one stays as it is. The names, numbers and dates are in the details, shared by every back.</p>
+        <div className={BUTTON_PAIRS}>
+          <Button variant="secondary" icon="wand" onClick={() => setTweaking(true)}>
+            Change it
+          </Button>
           <Button variant="secondary" icon="layers" onClick={moreLike} busy={busy === 'more'}>
             More like this
           </Button>
-          <Button variant="secondary" icon="wand" onClick={() => setTweaking(true)}>
-            Change something
-          </Button>
-          <Button variant="secondary" icon="type" onClick={() => setEditing(true)}>
+          <Button variant="secondary" icon="type" onClick={() => setEditing(true)} className="col-span-2">
             Edit the details
           </Button>
-          <LinkButton href={`${base}/back`} variant="secondary" icon="grid">
-            All the backs
-          </LinkButton>
         </div>
         {o.payload.palette || o.payload.pairing ? (
           <div className="mt-2 flex justify-center">
@@ -219,6 +241,10 @@ export default function BackOptionPage() {
             </Button>
           </div>
         ) : null}
+
+        <LinkButton href={back.href} variant="secondary" icon="chevronLeft" className="mt-6 w-full">
+          {back.button}
+        </LinkButton>
         {o.archived || (state.project.status === 'approved' && state.decision?.snapshot.back?.optionId === o.id) ? null : (
           <div className="mt-3 flex justify-center">
             <Button variant="ghost" size="sm" icon="archive" onClick={shelf.archive} busy={shelf.busy}>
@@ -226,16 +252,6 @@ export default function BackOptionPage() {
             </Button>
           </div>
         )}
-
-        {state.canApprove && state.project.status !== 'approved' && !o.archived ? (
-          <div className="mt-8 rounded-3xl bg-lagoon-soft p-5 text-center">
-            <p className="font-display text-lg font-semibold text-lagoon-deep">This one on the back?</p>
-            <p className="mb-4 mt-1 text-sm text-lagoon-deep/80">You&apos;ll pick the front and check everything on the next screen.</p>
-            <LinkButton href={`${base}/approve?back=${o.id}`} size="lg" icon="check" className="w-full">
-              Use this back
-            </LinkButton>
-          </div>
-        ) : null}
       </div>
 
       <FactsSheet open={editing} onClose={() => setEditing(false)} focus={t.uses} />
@@ -247,7 +263,7 @@ export default function BackOptionPage() {
 const QUICK = ['Smaller, under the collar', 'Bigger', 'Different colors', 'Navy and gold', 'Typewriter lettering', 'Match the front'];
 
 function BackTweakSheet({ option, open, onClose, onCreated }: { option: BackOption; open: boolean; onClose: () => void; onCreated: (o: BackOption) => void }) {
-  const { state, addBacks } = useProject();
+  const { state, addBackVersion } = useProject();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const send = async (request: string) => {
@@ -255,8 +271,8 @@ function BackTweakSheet({ option, open, onClose, onCreated }: { option: BackOpti
     setBusy(true);
     try {
       const res = await http<{ option: BackOption; summary: string }>(`/api/projects/${state.project.id}/backs/edit`, { body: { optionId: option.id, request } });
-      addBacks([res.option]);
-      toast(`Made a new version: ${res.summary}`);
+      const kept = await addBackVersion(res.option, option.id);
+      toast(kept ? `Made a new version: ${res.summary}. It's in Favorites too.` : `Made a new version: ${res.summary}`);
       setText('');
       onClose();
       onCreated(res.option);
@@ -276,6 +292,7 @@ function BackTweakSheet({ option, open, onClose, onCreated }: { option: BackOpti
         placeholder="e.g. smaller, in navy and gold"
         className="mb-3 w-full resize-none rounded-2xl bg-white px-4 py-3 text-[17px] shadow-[var(--shadow-card)] outline-none ring-1 ring-line focus:ring-2 focus:ring-lagoon"
       />
+      <p className="mb-2 text-sm text-muted">Or tap one to make it straight away:</p>
       <div className="mb-4 flex flex-wrap gap-2">
         {QUICK.map((q) => (
           <button key={q} onClick={() => send(q)} disabled={busy} className="rounded-full bg-white px-3.5 py-2 text-sm font-medium ring-1 ring-line active:scale-95">

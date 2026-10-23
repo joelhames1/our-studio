@@ -20,15 +20,24 @@ interface FinderState {
 const SEARCHING = ['Searching the web…', 'Reading their websites…', 'Checking minimums and file requirements…', 'Looking for prices…', 'Nearly done…'];
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-/** On the final screen: printers near a ZIP code and online, a shared shortlist, and a link to send them. */
-export function PrinterFinder() {
+/**
+ * On the final screen: printers near a ZIP code and online, a shared shortlist,
+ * and a link to send them. `sendAny` opens the link for a shop you already have
+ * (the page's own "Send to a print shop" button); `onSendClosed` hears when it closes.
+ */
+export function PrinterFinder({ sendAny = false, onSendClosed }: { sendAny?: boolean; onSendClosed?: () => void }) {
   const { state } = useProject();
   const pid = state.project.id;
   const [data, setData] = useState<FinderState | null>(null);
   const [zip, setZip] = useState('');
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
-  const [sending, setSending] = useState<Printer | 'any' | null>(null);
+  const [picked, setPicked] = useState<Printer | null>(null);
+  const sending: Printer | 'any' | null = picked ?? (sendAny ? 'any' : null);
+  const setSending = (p: Printer | null) => {
+    setPicked(p);
+    if (!p) onSendClosed?.();
+  };
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
@@ -83,16 +92,24 @@ export function PrinterFinder() {
   const last = data ? lastSearched(data.printers, key) : null;
   const fresh = !!last && Date.now() - Date.parse(last) < FRESH_DAYS * DAY_MS;
 
+  // Without Claude there's no search; only whoever runs the site can do anything about that, so only they hear about it.
+  const canSearch = state.ai.words;
+  if (!canSearch && !state.me.admin && !mine.length) {
+    return data && sending ? <SendSheet printer={sending === 'any' ? null : sending} job={data.job} onClose={() => setSending(null)} /> : null;
+  }
+
   return (
     <section className="mt-6" aria-labelledby="printers">
       <h2 id="printers" className="font-display text-xl font-semibold">
-        Find a printer
+        {canSearch || state.me.admin ? 'Find a printer' : 'Your printers'}
       </h2>
-      <p className="mt-1 text-[15px] text-muted">
-        Shops near you and online services that ship to you. Claude reads their websites, so check anything important with them before you order.
-      </p>
+      {canSearch ? (
+        <p className="mt-1 text-[15px] text-muted">
+          Shops near you and online services that ship to you. Claude reads their websites, so check anything important with them before you order.
+        </p>
+      ) : null}
 
-      {state.ai.words ? (
+      {canSearch ? (
         <form
           className="mt-4 flex gap-2"
           onSubmit={(e) => {
@@ -113,11 +130,11 @@ export function PrinterFinder() {
             {fresh ? 'Up to date' : last ? 'Search again' : 'Find printers'}
           </Button>
         </form>
-      ) : (
+      ) : state.me.admin ? (
         <p className="mt-4 rounded-2xl bg-sun-soft px-4 py-3 text-sm text-[#6b4f0c]">
-          Printer search uses Claude, which isn&apos;t connected yet.{state.me.admin ? ' Add ANTHROPIC_API_KEY in Setup.' : ''}
+          Printer search needs Claude: add ANTHROPIC_API_KEY in Setup. Only you see this; everyone else just doesn&apos;t see the search.
         </p>
-      )}
+      ) : null}
 
       {last && !busy ? (
         <p className="mt-2 text-sm text-muted">
@@ -163,10 +180,6 @@ export function PrinterFinder() {
           </div>
         </>
       ) : null}
-
-      <button onClick={() => setSending('any')} className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-lagoon">
-        <Icon name="link" size={15} /> Already have a printer? Send them a link to the files
-      </button>
 
       {data && sending ? <SendSheet printer={sending === 'any' ? null : sending} job={data.job} onClose={() => setSending(null)} /> : null}
     </section>

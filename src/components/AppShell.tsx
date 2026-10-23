@@ -147,9 +147,14 @@ function Sidebar({ me, path }: { me: User; path: string }) {
           <kbd className="rounded-md bg-white px-1.5 text-xs text-muted ring-1 ring-line">?</kbd>
         </button>
         {me.admin ? (
-          <Link prefetch={false} href="/admin" aria-current={path === '/admin' ? 'page' : undefined} className={`${item} text-ink/75`}>
-            <Icon name="settings" size={18} /> Setup
-          </Link>
+          <>
+            <Link prefetch={false} href="/admin/households" aria-current={path.startsWith('/admin/') ? 'page' : undefined} className={`${item} text-ink/75`}>
+              <Icon name="users" size={18} /> All households
+            </Link>
+            <Link prefetch={false} href="/admin" aria-current={path === '/admin' ? 'page' : undefined} className={`${item} text-ink/75`}>
+              <Icon name="settings" size={18} /> Setup
+            </Link>
+          </>
         ) : null}
         <form action="/api/logout" method="post" className="flex items-baseline gap-1.5 px-2.5 pt-2 text-xs text-muted">
           Signed in as{' '}
@@ -169,7 +174,7 @@ const KEYS: [string, [string[], string][]][] = [
   [
     'Browsing one at a time',
     [
-      [['→', 'L'], 'Love it'],
+      [['→', 'L'], 'Love'],
       [['↓', 'M'], 'Maybe'],
       [['←', 'P'], 'Pass'],
       [['Z'], 'Undo the last one'],

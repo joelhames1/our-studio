@@ -51,7 +51,7 @@ test('Erin colors just the words she wants', async ({ page }) => {
   await sheet.getByRole('radio', { name: 'Quoted words' }).click();
   await sheet.getByRole('button', { name: 'Sunshine' }).click();
   await expect(sheet.getByText('Sunshine quoted words will be hard to read on a white shirt.')).toBeVisible();
-  await sheet.getByRole('button', { name: 'Back to the scheme' }).click();
+  await sheet.getByRole('button', { name: 'Back to the color scheme' }).click();
   await expect(sheet.getByText(/hard to read/)).toHaveCount(0);
 
   // Saving is a server round trip (and, on the dev server, the route's first compile), so it gets longer than the default.
@@ -64,7 +64,7 @@ test('Erin colors just the words she wants', async ({ page }) => {
   expect({ ...coral.payload, colors: undefined }).toEqual({ ...seed.payload, colors: undefined });
 
   // In words: "the Grand" is the quoted word, and the coral stays.
-  await page.getByRole('button', { name: 'Change something' }).click();
+  await page.getByRole('button', { name: 'Change it' }).click();
   await page.getByRole('dialog').getByRole('textbox').fill('make the Grand sunshine yellow');
   await page.getByRole('button', { name: 'Make it', exact: true }).click();
   await expect(page.getByText('Made a new version: quoted words: sunshine')).toBeVisible({ timeout: 30_000 });

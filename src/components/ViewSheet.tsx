@@ -30,7 +30,7 @@ export function ViewButton() {
         {style} · {color.name}
         <Icon name="shirt" size={15} className="text-ink/50" />
       </button>
-      <Sheet open={open} onClose={() => setOpen(false)} title="Try it on">
+      <Sheet open={open} onClose={() => setOpen(false)} title="Shirt and view">
         <GarmentPicker style={prefs.style} color={prefs.color} onChange={(p) => setPrefs(p)} />
         <div className="mt-4 flex gap-1.5 rounded-full bg-sand-2 p-1" role="radiogroup" aria-label="Zoom">
           {VIEWS.map((v) => (

@@ -46,7 +46,8 @@ export const BackPreview = memo(function BackPreview({ back, facts, front, copy,
     let crop: { x: number; y: number; w: number; h: number } | undefined;
     if (view === 'chest') {
       const r = printRect({ style, side: 'back', printWidthIn: widthIn, placement });
-      const w = placement === 'neck' ? 300 : r.w * 1.32;
+      // A small print under the collar gets a tight frame, or it's a speck on a card.
+      const w = placement === 'neck' ? 210 : r.w * 1.32;
       crop = { x: 500 - w / 2, y: r.y - (placement === 'neck' ? 60 : 55), w, h: w * 1.1 };
     }
     return renderMockup({ style, side: 'back', colorHex: shirt.hex, tone: shirt.tone, design: inner, printWidthIn: widthIn, placement, id: rid, view: view === 'full' ? 'full' : 'chest', crop });

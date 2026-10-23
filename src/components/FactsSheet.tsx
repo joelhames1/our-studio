@@ -88,7 +88,7 @@ export function FactsSheet({ open, onClose, focus = [] }: { open: boolean; onClo
           <input className={input} value={people} onChange={(e) => setPeople(e.target.value)} aria-label="Names" />
         </Field>
         <Field label="What it's called">
-          <input className={input} value={f.title} onChange={(e) => set({ title: e.target.value })} aria-label="What it's called" placeholder="The Grand Tour" />
+          <input className={input} value={f.title} onChange={(e) => set({ title: e.target.value })} aria-label="What it's called" placeholder={`e.g. ${state.project.title}`} />
         </Field>
         <Field label="Dates">
           <input className={input} value={f.dates} onChange={(e) => set({ dates: e.target.value })} aria-label="Dates" />
@@ -98,14 +98,7 @@ export function FactsSheet({ open, onClose, focus = [] }: { open: boolean; onClo
         </Field>
       </Group>
 
-      {!hasRoute ? (
-        <button
-          onClick={() => set({ stops: [{ code: '', place: '', region: '', date: '', stay: true }] })}
-          className="mb-3 flex w-full items-center gap-2 rounded-3xl border-2 border-dashed border-line px-4 py-3 text-left text-sm text-muted"
-        >
-          <Icon name="plane" size={16} className="text-lagoon" /> Traveling? Add a route for the route backs
-        </button>
-      ) : (
+      {!hasRoute ? null : (
         <Group title="The route" hint={`${f.stops.length} stop${f.stops.length === 1 ? '' : 's'}, in order`} open={wants('stops')}>
           {f.stops.map((s, i) => (
             <div key={i} className={`py-2 ${i ? 'border-t border-line/70' : ''}`}>
@@ -227,6 +220,16 @@ export function FactsSheet({ open, onClose, focus = [] }: { open: boolean; onClo
           </div>
         ) : null}
       </Group>
+
+      {/* Not a trip, but there's a journey in it (a reunion road trip, say): a route can still go on the back. */}
+      {!hasRoute ? (
+        <button
+          onClick={() => set({ stops: [{ code: '', place: '', region: '', date: '', stay: true }] })}
+          className="mb-3 flex w-full items-center gap-2 rounded-3xl border-2 border-dashed border-line px-4 py-3 text-left text-sm text-muted"
+        >
+          <Icon name="plane" size={16} className="text-lagoon" /> Is there a journey in it? Add the stops and the back can show the route
+        </button>
+      ) : null}
 
       <div className="sticky bottom-0 -mx-5 bg-gradient-to-t from-sand via-sand to-transparent px-5 pb-2 pt-4">
         <Button size="lg" className="w-full" busy={busy} onClick={save} icon="check">

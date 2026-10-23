@@ -14,7 +14,7 @@ const VARIANTS: Record<Variant, string> = {
 
 /**
  * A two-column grid of buttons. On phones each one puts its icon above its
- * label, so labels like "Change something" stay on one line on any phone.
+ * label, so labels like "More like this" stay on one line on any phone.
  * A button spanning both columns keeps its icon beside the label.
  */
 export const BUTTON_PAIRS =

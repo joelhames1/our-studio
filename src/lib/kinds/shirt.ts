@@ -57,3 +57,13 @@ export interface ShirtSnapshot {
 }
 
 export const SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
+
+/**
+ * Who gets a shirt, to start with: the people the project is about, then
+ * everyone in the household, once each (just you if there's nobody else).
+ */
+export function startingSizes(people: string[], household: string[], me: string): SizeLine[] {
+  const seen = new Set<string>();
+  const names = [...people, ...household].map((p) => p.trim()).filter((p) => p && !seen.has(p.toLowerCase()) && seen.add(p.toLowerCase()));
+  return (names.length ? names : [me]).slice(0, 12).map((who) => ({ who, size: 'M', qty: 1 }));
+}

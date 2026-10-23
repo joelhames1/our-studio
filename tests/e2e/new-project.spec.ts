@@ -40,16 +40,16 @@ test('Joel starts a birthday shirt for Maya and gets the final say', async ({ br
   await expect(joel.getByRole('link', { name: "Maya's 40th" })).toBeVisible();
   await expect(joel.getByText('Vintage 1987 · Forty and Fabulous')).toBeVisible();
 
-  // Browse and heart the first design.
+  // Browse and love the first design.
   await joel.getByRole('link', { name: 'Start browsing' }).click();
   await expect(joel.getByText(/to look at/)).toBeVisible();
-  await Promise.all([saved(joel), joel.getByRole('button', { name: 'Love it' }).click()]);
+  await Promise.all([saved(joel), joel.getByRole('button', { name: 'Love', exact: true }).click()]);
 
   // The back: a jersey with Maya's name is one of the starters.
-  await joel.getByRole('link', { name: 'Back', exact: true }).click();
-  await expect(joel.getByRole('heading', { name: 'The back' })).toBeVisible();
+  await joel.getByRole('link', { name: 'Back print', exact: true }).click();
+  await expect(joel.getByRole('heading', { name: 'The back print' })).toBeVisible();
   await expect(joel.getByRole('button', { name: 'Travel' })).toHaveCount(0);
-  await Promise.all([saved(joel), joel.getByRole('button', { name: 'Heart Name & Number · Arched name' }).click()]);
+  await Promise.all([saved(joel), joel.getByRole('button', { name: 'Love Name and number · Arched name' }).click()]);
 
   // Erin sees it on her home screen, and that it's Joel's call.
   const erin = await signIn(browser, 'erin');
@@ -58,28 +58,29 @@ test('Joel starts a birthday shirt for Maya and gets the final say', async ({ br
   await expect(card.getByText('Joel has the final say')).toBeVisible();
   await card.click();
   await expect(erin).toHaveURL(/\/p\/mayas-40th-/);
-  await erin.getByRole('link', { name: 'Approve', exact: true }).click();
+  await erin.getByRole('link', { name: 'Final', exact: true }).click();
   await expect(erin.getByRole('heading', { name: 'Joel makes the final call' })).toBeVisible();
 
   // Joel approves, with the jersey on the back.
   await joel.goto(joel.url().replace(/\/back$/, '/approve'));
-  await expect(joel.getByRole('heading', { name: 'Pick the one' })).toBeVisible();
-  await expect(joel.getByRole('button', { name: 'Name & Number · Arched name' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(joel.getByRole('heading', { name: 'Pick the final' })).toBeVisible();
+  await expect(joel.getByRole('button', { name: 'Name and number · Arched name' })).toHaveAttribute('aria-pressed', 'true');
   await expect(joel.getByText('Vintage 1987', { exact: true })).toBeVisible();
   await expect(joel.getByText(/Each shirt gets its own name/)).toBeVisible();
   await joel.getByText("I've checked every word").click();
-  await joel.getByRole('button', { name: 'Yes, this is the one' }).click();
+  await joel.getByRole('button', { name: 'Approve and make the print files' }).click();
   await expect(joel.getByRole('heading', { name: "It's the one!" })).toBeVisible({ timeout: 30_000 });
   await expect(joel.getByText('For the print shop')).toBeVisible({ timeout: 90_000 });
+  await joel.getByText(/Individual files/).click();
   await expect(joel.getByRole('link', { name: /Back print file: Maya/ })).toBeVisible();
-  const zip = (await joel.getByRole('link', { name: /Everything \(zip\)/ }).getAttribute('href'))!;
+  const zip = (await joel.getByRole('link', { name: /Download everything/ }).getAttribute('href'))!;
   expect(zip).toContain('mayas-40th-print-package.zip');
   await expect(joel.getByText('You picked it')).toBeVisible();
 
-  // No Claude on a laptop, so no search; but a link for a printer you already know works.
+  // No Claude on a laptop, so no search (Joel runs the site, so he's told why); but sending a link works.
   await expect(joel.getByRole('heading', { name: 'Find a printer' })).toBeVisible();
-  await expect(joel.getByText(/Printer search uses Claude, which isn.t connected yet/)).toBeVisible();
-  await joel.getByRole('button', { name: /Already have a printer/ }).click();
+  await expect(joel.getByText(/Printer search needs Claude/)).toBeVisible();
+  await joel.getByRole('button', { name: 'Send to a print shop' }).click();
   const sheet = joel.getByRole('dialog', { name: 'Send to a printer' });
   const link = (await sheet.locator('.font-mono').textContent({ timeout: 30_000 }))!.trim();
   expect(link).toMatch(/\/s\/[a-z0-9]+\.[A-Za-z0-9_-]{32}$/);

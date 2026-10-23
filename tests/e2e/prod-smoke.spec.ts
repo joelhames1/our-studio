@@ -89,7 +89,7 @@ test('sign in with real links, use the app, and refuse writes from elsewhere', a
   await joel.page.getByRole('radio', { name: '3D' }).click();
   await expect(joel.page.locator('[data-testid="tryon-3d"][data-state="ready"]')).toBeVisible({ timeout: 90_000 });
   await joel.page.goto(`${PROJECT}/back`);
-  await expect(joel.page.getByRole('heading', { name: 'The back' })).toBeVisible();
+  await expect(joel.page.getByRole('heading', { name: 'The back print' })).toBeVisible();
   await joel.page.goto(`${PROJECT}/approve`);
   await expect(joel.page.getByRole('heading', { name: 'Erin makes the final call' })).toBeVisible();
 

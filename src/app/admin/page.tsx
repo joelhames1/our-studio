@@ -2,69 +2,31 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getUser } from '@/lib/server/auth';
-import { ago, type ServiceTrouble } from '@/lib/server/health';
 import { setupStatus } from '@/lib/server/setup';
 import { Icon } from '@/components/Icon';
-import { CopyButton, CopyLinkButton, HouseholdBudgets, TestButton } from '@/components/AdminBits';
-import { InvitePanel } from '@/components/InvitePanel';
+import { CopyButton, CopyLinkButton, TestButton } from '@/components/AdminBits';
+import { AdminOnly, byStatus, Code, Failing, Row, seconds, type Status } from './rows';
 
 export const dynamic = 'force-dynamic';
 
-function Row({ ok, title, children }: { ok: boolean | 'warn'; title: string; children: React.ReactNode }) {
-  const tone = ok === true ? 'bg-lagoon text-white' : ok === 'warn' ? 'bg-sun text-ink' : 'bg-coral text-white';
-  return (
-    <section className="rounded-3xl bg-white p-5 shadow-[var(--shadow-card)]">
-      <div className="mb-2 flex items-center gap-2.5">
-        <span className={`flex h-7 w-7 items-center justify-center rounded-full ${tone}`}>
-          <Icon name={ok === true ? 'check' : ok === 'warn' ? 'maybe' : 'x'} size={16} />
-        </span>
-        <h2 className="font-display text-lg font-semibold">{title}</h2>
-      </div>
-      <div className="space-y-2 text-[15px] text-ink/80">{children}</div>
-    </section>
-  );
-}
-
-/** A service whose recent calls are failing: when, what for, and what it said. */
-function Failing({ t }: { t: ServiceTrouble }) {
-  return (
-    <div className="rounded-2xl bg-coral-soft px-3 py-2 text-coral">
-      <p className="font-medium">
-        Not working. The last call failed {ago(t.at)} ({t.note}):
-      </p>
-      <p className="mt-1">{t.message}</p>
-      <p className="mt-1 text-sm">{t.effect} Once it&apos;s fixed, press Test it to clear this.</p>
-    </div>
-  );
-}
-
-const Code = ({ children }: { children: React.ReactNode }) => (
-  <code className="rounded-md bg-sand-2 px-1.5 py-0.5 font-mono text-[13px] text-ink">{children}</code>
-);
-
 export default async function AdminPage() {
   const user = await getUser();
-  if (!user) redirect('/');
-  if (!user.admin) redirect('/');
+  if (!user) redirect(`/?next=${encodeURIComponent('/admin')}`);
+  if (!user.admin) return <AdminOnly />;
   const h = await headers();
   const proto = h.get('x-forwarded-proto') ?? 'http';
   const origin = `${proto}://${h.get('host')}`;
   const s = await setupStatus(origin);
-  /** What the households with limits of their own could spend between them. */
-  const limitsTotal = s.budget.households.reduce((a, h) => a + (h.limit ?? 0), 0);
   const claudeTrouble = s.trouble.find((t) => t.provider === 'anthropic');
   const artTrouble = s.trouble.find((t) => t.provider === s.art.provider);
 
-  return (
-    <main className="mx-auto max-w-xl px-4 pb-20 pt-6 sm:px-6 lg:max-w-5xl lg:px-8 lg:pt-10">
-      <Link href="/" className="mb-4 inline-flex items-center gap-1 text-sm text-muted">
-        <Icon name="chevronLeft" size={16} /> Home
-      </Link>
-      <h1 className="font-display text-[30px] font-semibold">Setup</h1>
-      <p className="mb-6 mt-1 text-muted">Only you see this page, {user.name}. Full walkthrough: <Code>docs/SETUP.md</Code> in the repo.</p>
-
-      <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-5 lg:space-y-0">
-        <Row ok={s.storage.ok} title="Database and file storage">
+  // Each service, whatever needs attention first. A sign-in method that isn't needed isn't shown.
+  const rows: { ok: Status; title: string; hidden?: boolean; body: React.ReactNode }[] = [
+    {
+      ok: s.storage.ok,
+      title: 'Database and file storage',
+      body: (
+        <>
           <p>{s.storage.message}</p>
           {s.storage.kind === 'local' && s.isVercel === false ? (
             <p className="text-sm text-muted">Fine on a laptop. For the real thing (Vercel), connect Supabase.</p>
@@ -78,9 +40,14 @@ export default async function AdminPage() {
             </details>
           ) : null}
           {s.storage.ok ? <TestButton target="storage" /> : null}
-        </Row>
-
-        <Row ok={s.backups.scheduled && !!s.backups.last && !s.backups.stale ? true : 'warn'} title="Backups">
+        </>
+      ),
+    },
+    {
+      ok: s.backups.scheduled && !!s.backups.last && !s.backups.stale ? true : 'warn',
+      title: 'Backups',
+      body: (
+        <>
           <p>
             {s.backups.last ? (
               <>
@@ -103,9 +70,14 @@ export default async function AdminPage() {
             </p>
           )}
           {s.storage.ok ? <TestButton target="backup" label="Back up now" /> : null}
-        </Row>
-
-        <Row ok={s.alerts.on ? true : 'warn'} title="Error alerts">
+        </>
+      ),
+    },
+    {
+      ok: s.alerts.on ? true : 'warn',
+      title: 'Error alerts',
+      body: (
+        <>
           {s.alerts.on ? (
             <p>
               On. When something breaks, an email goes to <Code>{s.alerts.to}</Code> from <Code>{s.alerts.from}</Code>: one an hour for each problem, and at
@@ -118,60 +90,14 @@ export default async function AdminPage() {
             </p>
           )}
           {s.alerts.keySet ? <TestButton target="alert" label="Send a test" /> : null}
-        </Row>
-
-        <Row ok={s.households.stored && s.invites.ready ? true : 'warn'} title="Households">
-          {s.households.stored ? (
-            <p>
-              {s.households.count} household{s.households.count === 1 ? '' : 's'}, {s.households.people} {s.households.people === 1 ? 'person' : 'people'}.{' '}
-              <Link href="/household" className="underline underline-offset-2">
-                Yours
-              </Link>{' '}
-              shows who&apos;s in it;{' '}
-              <Link href="/admin/people" className="underline underline-offset-2">
-                People
-              </Link>{' '}
-              shows everyone, with closed accounts and erasing.
-            </p>
-          ) : (
-            <p>
-              Run <Code>supabase/migrations/0006_households.sql</Code> (it&apos;s in the setup SQL below). The two of you move into the database as the first
-              household, you as its owner. Until then you&apos;re both worked out from <Code>ERIN_GOOGLE_EMAIL</Code> and <Code>JOEL_GOOGLE_EMAIL</Code>, as before.
-            </p>
-          )}
-          <ul className="space-y-1">
-            {s.households.first.map((p) => (
-              <li key={p.name}>
-                <span className="inline-block w-12 font-medium">{p.you ? 'You' : p.name}</span>{' '}
-                {p.email ?? <span className="text-muted">no address yet ({p.you ? 'JOEL_GOOGLE_EMAIL' : 'ERIN_GOOGLE_EMAIL'})</span>}
-              </li>
-            ))}
-          </ul>
-          <p className="text-sm text-muted">
-            While <Code>ERIN_GOOGLE_EMAIL</Code> and <Code>JOEL_GOOGLE_EMAIL</Code> are in Vercel, they stay Erin&apos;s and your sign-in addresses; change one and
-            redeploy to change who that is.
-          </p>
-          {s.households.stored && s.invites.ready ? (
-            <>
-              <p>
-                New households only arrive by invite from you. Whoever opens the link signs in with Google or an emailed code and becomes their household&apos;s owner,
-                with ${s.budget.newHouseholds} a month of AI to start. To add someone to your own household, use{' '}
-                <Link href="/household" className="underline underline-offset-2">
-                  Household
-                </Link>
-                .
-              </p>
-              <InvitePanel kind="household" open={s.invites.open} />
-            </>
-          ) : s.households.stored ? (
-            <p>
-              To invite people, run <Code>supabase/migrations/0007_invites_and_sessions.sql</Code> (it&apos;s in the setup SQL below). It adds invites and the list of
-              signed-in devices.
-            </p>
-          ) : null}
-        </Row>
-
-        <Row ok={s.google.on ? true : 'warn'} title="Sign in with Google">
+        </>
+      ),
+    },
+    {
+      ok: s.google.on ? true : 'warn',
+      title: 'Sign in with Google',
+      body: (
+        <>
           {s.google.on ? (
             <>
               <p>
@@ -254,9 +180,14 @@ export default async function AdminPage() {
               </ol>
             </>
           )}
-        </Row>
-
-        <Row ok={s.codes.on ? true : 'warn'} title="Email codes">
+        </>
+      ),
+    },
+    {
+      ok: s.codes.on ? true : 'warn',
+      title: 'Email codes',
+      body: (
+        <>
           {s.codes.on ? (
             <>
               <p>
@@ -283,9 +214,14 @@ export default async function AdminPage() {
               .
             </p>
           )}
-        </Row>
-
-        <Row ok={s.links.configured || s.google.on || s.codes.on} title="Personal links">
+        </>
+      ),
+    },
+    {
+      ok: s.links.configured || s.google.on || s.codes.on,
+      title: 'Personal links', hidden: !s.links.configured && !s.links.off && (s.google.on || s.codes.on),
+      body: (
+        <>
           {s.links.off ? (
             <p>
               Switched off (<Code>SIGN_IN_LINKS=off</Code>). Phones that signed in with a link stay signed in until they sign out. Remove the setting to switch
@@ -329,9 +265,14 @@ export default async function AdminPage() {
               </div>
             </>
           )}
-        </Row>
-
-        <Row ok={claudeTrouble ? false : s.claude.connected ? true : 'warn'} title="Claude (words, tweaks, art direction)">
+        </>
+      ),
+    },
+    {
+      ok: claudeTrouble ? false : s.claude.connected ? true : 'warn',
+      title: 'Claude (words, tweaks, art direction)',
+      body: (
+        <>
           {s.claude.connected ? (
             <>
               {claudeTrouble ? <Failing t={claudeTrouble} /> : null}
@@ -345,9 +286,14 @@ export default async function AdminPage() {
               Optional but recommended. Add <Code>ANTHROPIC_API_KEY</Code>. Without it, tweaks use simple keyword matching and there are no new word ideas.
             </p>
           )}
-        </Row>
-
-        <Row ok={artTrouble ? false : s.art.practice ? 'warn' : true} title="AI artwork">
+        </>
+      ),
+    },
+    {
+      ok: artTrouble ? false : s.art.practice ? 'warn' : true,
+      title: 'AI artwork',
+      body: (
+        <>
           {s.art.practice ? (
             <p>
               No image key yet, so new artwork uses the built-in practice artist (laptop only). Add <Code>FAL_KEY</Code> (recommended) or <Code>OPENAI_API_KEY</Code>.
@@ -361,48 +307,14 @@ export default async function AdminPage() {
               <TestButton target="art" />
             </>
           )}
-        </Row>
-
-        <Row
-          ok={s.budget.spent < s.budget.limit * 0.8 && s.budget.households.every((h) => h.limit === null || h.spent < h.limit * 0.8) && limitsTotal <= s.budget.limit ? true : 'warn'}
-          title="AI spending this month"
-        >
-          <div className="h-2.5 overflow-hidden rounded-full bg-sand-2">
-            <div className="h-full rounded-full bg-lagoon" style={{ width: `${Math.min(100, (s.budget.spent / Math.max(s.budget.limit, 0.01)) * 100)}%` }} />
-          </div>
-          <p>
-            ${s.budget.spent.toFixed(2)} of ${s.budget.limit} across the whole site (change with <Code>MONTHLY_BUDGET_USD</Code>). Fresh ideas and remixes are free; only new artwork and Claude calls cost anything.
-          </p>
-          {s.budget.households.length ? (
-            <>
-              <p>
-                Each household also has its own limit, so nobody can use up everyone else&apos;s month. New households start at ${s.budget.newHouseholds}; yours has none of its own
-                unless you give it one. Whatever the limits, everything stops once the site&apos;s budget is used up.
-              </p>
-              <HouseholdBudgets households={s.budget.households} editable={s.budget.editable} />
-              {limitsTotal > s.budget.limit ? (
-                <p className="text-sm text-coral">
-                  The households&apos; own limits add up to ${limitsTotal}, more than the site&apos;s ${s.budget.limit}. If they all used theirs, the site&apos;s budget would run out
-                  for everyone, yours included. Raise <Code>MONTHLY_BUDGET_USD</Code> as households join, or lower a household&apos;s limit.
-                </p>
-              ) : null}
-              {!s.budget.editable ? <p className="text-sm text-muted">Changing them needs the households setup file run (see Households above).</p> : null}
-            </>
-          ) : null}
-          {s.budget.recent.length ? (
-            <ul className="divide-y divide-line/70 text-sm">
-              {s.budget.households.length > 1 ? <li className="py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted">Recent, your household</li> : null}
-              {s.budget.recent.map((r) => (
-                <li key={r.id} className="flex justify-between gap-3 py-1.5">
-                  <span className="truncate text-muted">{r.note}</span>
-                  <span className="tabular-nums">${r.usd.toFixed(3)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </Row>
-
-        <Row ok={s.timings.every((t) => t.targetMs === null || t.typicalMs <= t.targetMs) ? true : 'warn'} title="How long AI calls take">
+        </>
+      ),
+    },
+    {
+      ok: s.timings.every((t) => t.targetMs === null || t.typicalMs <= t.targetMs) ? true : 'warn',
+      title: 'How long AI calls take',
+      body: (
+        <>
           {s.timings.length ? (
             <>
               <p>The last 30 days, from calls that finished: typical (half are quicker) and the slowest.</p>
@@ -422,7 +334,38 @@ export default async function AdminPage() {
           ) : (
             <p>Nothing timed yet: each AI call is timed from now on, and the figures show up here.</p>
           )}
-        </Row>
+        </>
+      ),
+    },
+  ];
+
+  return (
+    <main className="mx-auto max-w-xl px-4 pb-20 pt-6 sm:px-6 lg:max-w-5xl lg:px-8 lg:pt-10">
+      <Link href="/" className="mb-4 inline-flex items-center gap-1 text-sm text-muted">
+        <Icon name="chevronLeft" size={16} /> Home
+      </Link>
+      <h1 className="font-display text-[30px] font-semibold">Setup</h1>
+      <p className="mt-1 text-muted">
+        The services the site runs on, anything that needs attention first. Only you see this page, {user.name}. Full walkthrough: <Code>docs/SETUP.md</Code> in the repo.
+      </p>
+      <Link href="/admin/households" className="mb-6 mt-4 flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-lift)]">
+        <Icon name="users" size={20} className="text-lagoon" />
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium">All households</span>
+          <span className="block text-sm text-muted">Invite a new household, AI budgets and spending, and everyone on the site</span>
+        </span>
+        <Icon name="chevronRight" size={18} className="text-ink/30" />
+      </Link>
+
+      <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-5 lg:space-y-0">
+        {rows
+          .filter((r) => !r.hidden)
+          .sort(byStatus)
+          .map((r) => (
+            <Row key={r.title} ok={r.ok} title={r.title}>
+              {r.body}
+            </Row>
+          ))}
       </div>
 
       <form action="/api/logout" method="post" className="mt-10 text-center">
@@ -430,12 +373,4 @@ export default async function AdminPage() {
       </form>
     </main>
   );
-}
-
-/** "4.2 s", "1 min 30 s". */
-function seconds(ms: number): string {
-  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
-  const m = Math.floor(ms / 60_000);
-  const sec = Math.round((ms % 60_000) / 1000);
-  return sec ? `${m} min ${sec} s` : `${m} min`;
 }

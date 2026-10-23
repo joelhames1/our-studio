@@ -19,7 +19,7 @@ function script(k: BackKit): Composed {
 
 export const statement: BackTemplate = {
   id: 'statement',
-  name: 'Big Statement',
+  name: 'Big words',
   blurb: 'One line, said loudly',
   occasions: ['trip', 'anniversary', 'birthday', 'graduation', 'reunion', 'team', 'everyday'],
   uses: ['statement', 'signature', 'people'],

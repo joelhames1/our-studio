@@ -10,12 +10,12 @@ export const HOW_STEPS = [
   {
     icon: 'heart',
     title: 'Everyone votes',
-    text: 'Swipe through the designs: heart the ones you like, maybe or pass the rest. Passes stay private, and the ones more of you love rise to the top.',
+    text: 'Swipe through the designs: love the ones you like, maybe or pass the rest. Passes stay private, and the ones more of you love rise to the top.',
   },
   {
     icon: 'wand',
     title: 'Make it yours',
-    text: 'Tap Change something and say what you want (“navy shirt, bigger words”), or ask for new artwork. Spin it in 3D before anything’s made.',
+    text: 'Open a design and tap Change it to say what you want (“navy shirt, bigger words”), or ask for new artwork. Spin it in 3D before anything’s made.',
   },
   {
     icon: 'check',
