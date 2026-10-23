@@ -7,6 +7,7 @@ import { ShirtPreview } from '@/components/ShirtPreview';
 import { ReactionButtons } from '@/components/Reactions';
 import { DesignBadges, describeDesign } from '@/components/DesignMeta';
 import { GarmentPicker } from '@/components/GarmentPicker';
+import { ViewButton } from '@/components/ViewSheet';
 import { toast } from '@/components/Toast';
 import { Button, LinkButton, PageTitle } from '@/components/ui';
 import { compareHref, MAX_COMPARE, setCompare } from '@/lib/client/compare';
@@ -111,8 +112,15 @@ function Compare() {
     <div className="animate-pop">
       <PageTitle kicker="Compare" title={`${designs.length} side by side`} sub="All on the same shirt, so you're comparing like with like." />
 
-      <div className="mb-5 space-y-3 lg:flex lg:items-center lg:gap-4 lg:space-y-0">
-        <div className="flex gap-1.5 rounded-full bg-sand-2 p-1 lg:w-80" role="radiogroup" aria-label="Zoom">
+      {/* On a phone the shirts come first: shirt and zoom fold into the same button Browse has. */}
+      <div className="mb-4 flex items-center justify-between gap-2 lg:hidden">
+        <ViewButton />
+        <Button variant="secondary" size="sm" icon="copy" onClick={copyLink}>
+          Copy link
+        </Button>
+      </div>
+      <div className="mb-5 hidden items-center gap-4 lg:flex">
+        <div className="flex w-80 gap-1.5 rounded-full bg-sand-2 p-1" role="radiogroup" aria-label="Zoom">
           {VIEWS.map((v) => (
             <button
               key={v.id}
@@ -125,10 +133,10 @@ function Compare() {
             </button>
           ))}
         </div>
-        <div className="rounded-3xl bg-white p-3 shadow-[var(--shadow-card)] lg:flex-1">
+        <div className="flex-1 rounded-3xl bg-white p-3 shadow-[var(--shadow-card)]">
           <GarmentPicker style={prefs.style} color={prefs.color} onChange={(p) => setPrefs(p)} compact />
         </div>
-        <Button variant="secondary" icon="copy" onClick={copyLink} className="w-full lg:w-auto">
+        <Button variant="secondary" icon="copy" onClick={copyLink}>
           Copy link
         </Button>
       </div>
