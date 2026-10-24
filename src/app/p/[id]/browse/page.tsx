@@ -235,7 +235,7 @@ export default function BrowsePage() {
   // The card is as wide as fits, and never so tall that its buttons drop below
   // the reactions: height over width for each view, plus the card's padding.
   const tall = view === 'full' ? 0.76 : view === 'art' ? (CANVAS.h + 120) / (CANVAS.w + 120) : 1.1;
-  const cardWidth = `min(${prefs.view === 'full' ? 560 : 440}px, calc((100dvh - 26rem) / ${tall.toFixed(3)} + 3rem))`;
+  const cardWidth = `min(${prefs.view === 'full' ? 560 : 440}px, calc((100dvh - 27.5rem) / ${tall.toFixed(3)} + 3rem))`;
 
   return (
     <div className="lg:grid lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-start lg:gap-10">

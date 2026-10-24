@@ -48,7 +48,7 @@ export function returnTo(base: string, from: Origin | null, approved: boolean): 
   }
 }
 
-/** Which tab a page belongs to. A design's own page belongs to the screen it was opened from. */
+/** Which of the four steps a page belongs to. A design's own page belongs to the screen it was opened from. */
 export function tabFor(path: string, base: string, from: Origin | null): Origin | null {
   const rest = path.slice(base.length);
   if (rest.startsWith('/o/')) return from === 'compare' ? 'favorites' : from === 'back' ? 'back' : (from ?? 'browse');

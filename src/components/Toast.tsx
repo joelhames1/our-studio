@@ -25,7 +25,7 @@ export function Toaster() {
   return (
     // On a phone, just under the project's header: the bottom of the screen is where the buttons are.
     <div
-      className="pointer-events-none fixed inset-x-0 top-[calc(max(0.5rem,env(safe-area-inset-top))+6.5rem)] z-50 flex flex-col items-center gap-2 px-4 lg:bottom-10 lg:top-auto lg:pl-64"
+      className="pointer-events-none fixed inset-x-0 top-[calc(var(--header-h,7rem)+0.5rem)] z-50 flex flex-col items-center gap-2 px-4 lg:bottom-10 lg:top-auto lg:pl-64"
       aria-live="polite"
     >
       {items.map((t) => (

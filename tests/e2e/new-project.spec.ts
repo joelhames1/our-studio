@@ -45,6 +45,13 @@ test('Joel starts a birthday shirt for Maya and gets the final say', async ({ br
   await expect(joel.getByText(/to look at/)).toBeVisible();
   await Promise.all([saved(joel), joel.getByRole('button', { name: 'Love', exact: true }).click()]);
 
+  // The steps along the top tick as you go: one love does Browse and Favorites, and the back is optional.
+  const steps = joel.getByRole('navigation', { name: 'Project steps' });
+  await expect(steps.getByRole('link', { name: 'Browse', exact: true })).toHaveAccessibleDescription(/^Step 1 of 4, done/);
+  await expect(steps.getByRole('link', { name: 'Favorites', exact: true })).toHaveAccessibleDescription(/^Step 2 of 4, done/);
+  await expect(steps.getByRole('link', { name: 'Back print', exact: true })).toHaveAccessibleDescription('Step 3 of 4, optional');
+  await expect(steps.getByRole('link', { name: 'Final', exact: true })).toHaveAccessibleDescription('Step 4 of 4');
+
   // The back: a jersey with Maya's name is one of the starters.
   await joel.getByRole('link', { name: 'Back print', exact: true }).click();
   await expect(joel.getByRole('heading', { name: 'The back print' })).toBeVisible();
@@ -76,6 +83,8 @@ test('Joel starts a birthday shirt for Maya and gets the final say', async ({ br
   const zip = (await joel.getByRole('link', { name: /Download everything/ }).getAttribute('href'))!;
   expect(zip).toContain('mayas-40th-print-package.zip');
   await expect(joel.getByText('You picked it')).toBeVisible();
+  await expect(steps.getByRole('link', { name: 'Done', exact: true })).toHaveAccessibleDescription('Step 4 of 4, done');
+  await expect(steps.getByRole('link', { name: 'Back print', exact: true })).toHaveAccessibleDescription('Step 3 of 4, done');
 
   // No Claude on a laptop, so no search (Joel runs the site, so he's told why); but sending a link works.
   await expect(joel.getByRole('heading', { name: 'Find a printer' })).toBeVisible();

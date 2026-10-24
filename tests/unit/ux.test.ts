@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 import { backHref, designHref, originOf, returnTo, safeNext, tabFor, upFrom } from '@/lib/engine/paths';
 import { carriedReaction } from '@/lib/engine/together';
+import { stepProgress } from '@/lib/engine/steps';
 import { suggestedTitle } from '@/lib/design/occasions';
 import { startingSizes } from '@/lib/kinds/shirt';
 import { backTemplate, templateName } from '@/lib/design/back/templates';
@@ -127,5 +128,38 @@ describe('back names', () => {
     expect(templateName(year, ['team'])).toBe('Year stamp');
     expect(templateName(backTemplate('statement'), ['graduation'])).toBe('Big words');
     expect(templateName(backTemplate('jersey'))).toBe('Name and number');
+  });
+});
+
+describe('the steps across the top of a project', () => {
+  const fresh = { fronts: [undefined, undefined], backs: [undefined], approved: false, plainBack: false };
+
+  it('starts with nothing done and the back marked optional', () => {
+    expect(stepProgress(fresh)).toEqual({
+      browse: { done: false },
+      favorites: { done: false },
+      back: { done: false, note: 'optional' },
+      final: { done: false },
+    });
+  });
+
+  it('ticks Browse on any swipe and Favorites on your first love', () => {
+    const passed = stepProgress({ ...fresh, fronts: ['pass', undefined] });
+    expect([passed.browse.done, passed.favorites.done]).toEqual([true, false]);
+    expect(stepProgress({ ...fresh, fronts: ['maybe'] }).favorites.done).toBe(false);
+    const loved = stepProgress({ ...fresh, fronts: ['pass', 'love'] });
+    expect([loved.browse.done, loved.favorites.done]).toEqual([true, true]);
+  });
+
+  it('ticks the back once you love one, and only then', () => {
+    expect(stepProgress({ ...fresh, backs: ['maybe'] }).back).toEqual({ done: false, note: 'optional' });
+    expect(stepProgress({ ...fresh, backs: ['love'] }).back).toEqual({ done: true });
+  });
+
+  it('has everything done once approved, and says when the back is plain', () => {
+    const done = stepProgress({ ...fresh, approved: true, plainBack: true });
+    expect(Object.values(done).every((s) => s.done)).toBe(true);
+    expect(done.back.note).toBe('plain');
+    expect(stepProgress({ ...fresh, approved: true }).back).toEqual({ done: true });
   });
 });
