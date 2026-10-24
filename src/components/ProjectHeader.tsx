@@ -56,7 +56,7 @@ export function ProjectHeader() {
     [
       `Step ${i + 1} of ${steps.length}`,
       done ? 'done' : note,
-      t.badge ? (t.id === 'browse' ? `${t.badge} to look at` : `${t.badge} ${members > 2 ? 'loved by you and others' : 'you both love'}`) : null,
+      t.badge ? (t.id === 'browse' ? `${t.badge} new` : `${t.badge} ${members > 2 ? 'loved by you and others' : 'you both love'}`) : null,
     ]
       .filter(Boolean)
       .join(', ');
