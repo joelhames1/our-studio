@@ -52,8 +52,9 @@ test('Erin designs, matches with Joel, and approves the shirt', async ({ browser
   await erin.mouse.move(box.x + box.width / 2 - 200, box.y + box.height / 2, { steps: 8 });
   await erin.mouse.up();
 
-  // Pick a style, from the project page.
+  // Pick a style, from the project page, which now says to keep going.
   await erin.getByRole('link', { name: 'Sample Shirt' }).click();
+  await expect(erin.getByRole('link', { name: 'Keep browsing' })).toBeVisible();
   await erin.getByRole('link', { name: /^Style/ }).click();
   await erin.getByRole('button', { name: /Boarding Pass/ }).click();
   await erin.getByRole('button', { name: /Make 8 in this style/ }).click();

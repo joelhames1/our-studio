@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 import { backHref, designHref, originOf, returnTo, safeNext, tabFor, upFrom } from '@/lib/engine/paths';
 import { carriedReaction } from '@/lib/engine/together';
-import { stepProgress } from '@/lib/engine/steps';
+import { startedBrowsing, stepProgress } from '@/lib/engine/steps';
 import { suggestedTitle } from '@/lib/design/occasions';
 import { startingSizes } from '@/lib/kinds/shirt';
 import { backTemplate, templateName } from '@/lib/design/back/templates';
@@ -149,6 +149,12 @@ describe('the steps across the top of a project', () => {
     expect(stepProgress({ ...fresh, fronts: ['maybe'] }).favorites.done).toBe(false);
     const loved = stepProgress({ ...fresh, fronts: ['pass', 'love'] });
     expect([loved.browse.done, loved.favorites.done]).toEqual([true, true]);
+  });
+
+  it('says Keep browsing, not Start browsing, from your first swipe', () => {
+    expect(startedBrowsing([undefined, undefined])).toBe(false);
+    expect(startedBrowsing([undefined, 'pass'])).toBe(true);
+    expect(startedBrowsing([])).toBe(false);
   });
 
   it('ticks the back once you love one, and only then', () => {

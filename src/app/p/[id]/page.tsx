@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { nameIn, useProject, otherName } from '@/components/ProjectProvider';
 import { sharedCount } from '@/lib/engine/together';
+import { startedBrowsing } from '@/lib/engine/steps';
 import { toast } from '@/components/Toast';
 import { http } from '@/lib/client/http';
 import { ShirtPreview } from '@/components/ShirtPreview';
@@ -64,6 +65,7 @@ export default function ProjectHub() {
   if (approved) return <ApprovedHub />;
 
   const hearts = state.options.filter((o) => myReaction(o.id) === 'love');
+  const started = startedBrowsing(state.options.map((o) => myReaction(o.id)));
   const featured = matches[0] ?? hearts[0] ?? state.options.find((o) => o.source === 'seed') ?? state.options[0];
   const vibes = project.brief.vibes.map((v) => vibe(v)?.name).filter(Boolean);
   const copy = project.brief.copy;
@@ -139,7 +141,7 @@ export default function ProjectHub() {
 
         <BottomBar>
           <LinkButton href={deck.length ? `${base}/browse` : `${base}/favorites`} size="lg" className="w-full" icon="heart">
-            {deck.length ? 'Start browsing' : 'See favorites'}
+            {deck.length ? (started ? 'Keep browsing' : 'Start browsing') : 'See favorites'}
           </LinkButton>
         </BottomBar>
       </div>

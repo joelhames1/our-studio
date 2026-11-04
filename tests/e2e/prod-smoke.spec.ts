@@ -83,7 +83,7 @@ test('sign in with real links, use the app, and refuse writes from elsewhere', a
   // The main screens render under the CSP.
   await joel.page.goto(PROJECT);
   await expect(joel.page.getByRole('heading', { name: "Let's make the shirt" })).toBeVisible();
-  await joel.page.getByRole('link', { name: 'Start browsing' }).click();
+  await joel.page.getByRole('link', { name: /^(Start|Keep) browsing$/ }).click();
   await expect(joel.page.locator('[role="img"] svg path').first()).toBeAttached();
   await joel.page.getByRole('link', { name: 'Look closer' }).click();
   await joel.page.getByRole('radio', { name: '3D' }).click();

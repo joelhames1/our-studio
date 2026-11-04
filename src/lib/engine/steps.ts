@@ -20,6 +20,11 @@ export interface StepInput {
   plainBack: boolean;
 }
 
+/** Whether you've swiped anything yet: Browse's check, and "Keep browsing" rather than "Start browsing". */
+export function startedBrowsing(fronts: (ReactionValue | undefined)[]): boolean {
+  return fronts.some(Boolean);
+}
+
 /**
  * Browse is done once you've swiped anything, Favorites once you love a front,
  * the back once you love one (it's optional until then), and Final once it's
@@ -28,7 +33,7 @@ export interface StepInput {
 export function stepProgress({ fronts, backs, approved, plainBack }: StepInput): Record<StepId, StepState> {
   const lovedBack = backs.includes('love');
   return {
-    browse: { done: approved || fronts.some(Boolean) },
+    browse: { done: approved || startedBrowsing(fronts) },
     favorites: { done: approved || fronts.includes('love') },
     back: approved ? { done: true, ...(plainBack ? { note: 'plain' as const } : {}) } : lovedBack ? { done: true } : { done: false, note: 'optional' },
     final: { done: approved },
